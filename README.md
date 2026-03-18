@@ -1,6 +1,4 @@
-```markdown
 # 🤖 AIOps Platform
-
 **AI-Powered Operations for CI/CD Pipeline Monitoring**
 
 Master's Thesis Project: Detecting and forecasting CI/CD pipeline failures using Machine Learning.
@@ -162,8 +160,3 @@ MIT License
 ## 👨‍💼 Author
 
 Rostyslav Voloshchak
-
-```
-
-Would you like me to help you draft any of those missing files from your `docs/` folder, like the `SETUP.md` or `ML_MODELS.md`?
-```
