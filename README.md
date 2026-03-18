@@ -1,4 +1,3 @@
-````markdown
 # 🤖 AIOps Platform
 
 **AI-Powered Operations for CI/CD Pipeline Monitoring**
@@ -8,6 +7,7 @@ Master's Thesis Project: Detecting and forecasting CI/CD pipeline failures using
 ## 📋 Project Overview
 
 DevOps teams spend hours analyzing logs to find root causes of pipeline failures. This platform automatically:
+
 - ✅ Analyzes Jenkins logs using ML (Isolation Forest)
 - ✅ Forecasts pipeline failures (ARIMA time series)
 - ✅ Provides actionable recommendations
@@ -21,7 +21,6 @@ Jenkins/K8s → Elasticsearch → FastAPI Backend → React Frontend
             Machine Learning (ML)
                    ↓
           Anomaly Detection + Forecasting
-````
 
 ## 📊 Tech Stack
 
@@ -160,6 +159,6 @@ MIT License
 
 ## 👨‍💼 Author
 
-Rostyslav Voloshchak - Master's Student
+Rostyslav Voloshchak
 -----
 
