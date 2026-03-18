@@ -1,3 +1,4 @@
+````markdown
 # 🤖 AIOps Platform
 
 **AI-Powered Operations for CI/CD Pipeline Monitoring**
@@ -21,6 +22,7 @@ Jenkins/K8s → Elasticsearch → FastAPI Backend → React Frontend
             Machine Learning (ML)
                    ↓
           Anomaly Detection + Forecasting
+````
 
 ## 📊 Tech Stack
 
@@ -160,5 +162,8 @@ MIT License
 ## 👨‍💼 Author
 
 Rostyslav Voloshchak
------
 
+```
+
+Would you like me to help you draft any of those missing files from your `docs/` folder, like the `SETUP.md` or `ML_MODELS.md`?
+```
