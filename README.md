@@ -22,7 +22,7 @@ Jenkins/K8s → Elasticsearch → FastAPI Backend → React Frontend
             Machine Learning (ML)
                    ↓
           Anomaly Detection + Forecasting
-````
+```
 
 ## 📊 Tech Stack
 
