@@ -7,6 +7,7 @@ export default function Layout({ children, page, setPage, backendOnline }) {
   const menuItems = [
     { id: 'dashboard', label: '📊 Dashboard', icon: '📊' },
     { id: 'predictor', label: '🔮 Predictor', icon: '🔮' },
+    { id: 'analytics', label: '📈 Analytics', icon: '📈' },
     { id: 'alerts', label: '🚨 Alerts', icon: '🚨' },
   ]
 
