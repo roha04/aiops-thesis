@@ -1,11 +1,14 @@
-"""Database models"""
+"""Database models for AIOps Platform"""
 
-from sqlalchemy import Column, String, Float, DateTime, Integer, Boolean, Text, Enum
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import Column, String, Float, DateTime, Integer, Boolean, Text, Enum, JSON
+from sqlalchemy.ext.declarative import declarative_base  # ✨ ADD THIS
 from datetime import datetime
 import enum
 
+# ✨ ADD THIS - Define Base declaratively
 Base = declarative_base()
+
+# ==================== EXISTING MODELS ====================
 
 class TrainingData(Base):
     """Training logs for ML models"""
@@ -98,3 +101,93 @@ class ModelMetrics(Base):
     
     def __repr__(self):
         return f"<ModelMetrics(f1={self.f1_score:.2f})>"
+
+# ==================== NEW MODELS ====================
+
+class TrainingHistory(Base):
+    """Track model training iterations"""
+    __tablename__ = "training_history"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    
+    # Training info
+    model_version = Column(String, index=True)
+    epoch = Column(Integer)
+    
+    # Metrics
+    accuracy = Column(Float)
+    precision = Column(Float)
+    recall = Column(Float)
+    f1_score = Column(Float)
+    
+    # Additional metrics
+    train_loss = Column(Float)
+    val_loss = Column(Float)
+    learning_rate = Column(Float)
+    
+    # Data info
+    training_samples = Column(Integer)
+    batch_size = Column(Integer)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.now, index=True)
+    
+    def __repr__(self):
+        return f"<TrainingHistory(v={self.model_version}, epoch={self.epoch}, f1={self.f1_score:.3f})>"
+
+
+class PredictionAnalytics(Base):
+    """Track prediction accuracy over time"""
+    __tablename__ = "prediction_analytics"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    
+    # Prediction info
+    prediction_id = Column(Integer, index=True)
+    pipeline_id = Column(String, index=True)
+    
+    # Prediction vs Reality
+    predicted_anomaly = Column(Boolean)
+    actual_anomaly = Column(Boolean, nullable=True)  # Null until we know actual
+    
+    # Metrics
+    prediction_confidence = Column(Float)
+    false_positive = Column(Boolean, nullable=True)
+    false_negative = Column(Boolean, nullable=True)
+    
+    # Timestamps
+    predicted_at = Column(DateTime, default=datetime.now, index=True)
+    verified_at = Column(DateTime, nullable=True)
+    
+    def __repr__(self):
+        return f"<PredictionAnalytics(pipeline={self.pipeline_id}, correct={self.actual_anomaly == self.predicted_anomaly})>"
+
+
+class SystemMetrics(Base):
+    """Track system health and performance"""
+    __tablename__ = "system_metrics"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    
+    # Performance
+    avg_prediction_time_ms = Column(Float)
+    avg_request_time_ms = Column(Float)
+    
+    # System health
+    total_predictions = Column(Integer)
+    successful_predictions = Column(Integer)
+    failed_predictions = Column(Integer)
+    
+    # Database
+    db_size_mb = Column(Float)
+    db_query_time_ms = Column(Float)
+    
+    # Alerts
+    alerts_generated = Column(Integer)
+    critical_alerts = Column(Integer)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.now, index=True)
+    
+    def __repr__(self):
+        return f"<SystemMetrics(predictions={self.total_predictions}, alerts={self.alerts_generated})>"

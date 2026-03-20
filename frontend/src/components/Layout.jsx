@@ -5,11 +5,12 @@ export default function Layout({ children, page, setPage, backendOnline }) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
 
   const menuItems = [
-    { id: 'dashboard', label: '📊 Dashboard', icon: '📊' },
-    { id: 'predictor', label: '🔮 Predictor', icon: '🔮' },
-    { id: 'analytics', label: '📈 Analytics', icon: '📈' },
-    { id: 'alerts', label: '🚨 Alerts', icon: '🚨' },
-  ]
+  { id: 'dashboard', label: '📊 Dashboard', icon: '📊' },
+  { id: 'predictor', label: '🔮 Predictor', icon: '🔮' },
+  { id: 'analytics', label: '📈 Analytics', icon: '📈' },
+  { id: 'analytics-history', label: '📚 History', icon: '📚' },
+  { id: 'alerts', label: '🚨 Alerts', icon: '🚨' },
+]
 
   return (
     <div className="flex h-screen bg-gray-900 text-gray-100">
