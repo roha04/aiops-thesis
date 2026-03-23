@@ -10,6 +10,7 @@ export default function Layout({ children, page, setPage, backendOnline }) {
   { id: 'analytics', label: '📈 Analytics', icon: '📈' },
   { id: 'analytics-history', label: '📚 History', icon: '📚' },
   { id: 'alerts', label: '🚨 Alerts', icon: '🚨' },
+  { id: 'jenkins', label: '🔧 Jenkins', icon: '🔧' },
 ]
 
   return (

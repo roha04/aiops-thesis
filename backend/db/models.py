@@ -191,3 +191,42 @@ class SystemMetrics(Base):
     
     def __repr__(self):
         return f"<SystemMetrics(predictions={self.total_predictions}, alerts={self.alerts_generated})>"
+
+
+# ==================== JENKINS INTEGRATION ====================
+
+class JenkinsBuild(Base):
+    """Stores Jenkins build data with ML prediction and actual outcome."""
+    __tablename__ = "jenkins_builds"
+
+    id = Column(Integer, primary_key=True, index=True)
+    job_name = Column(String, index=True, nullable=False)
+    build_number = Column(Integer, nullable=False)
+
+    # Raw build info from Jenkins
+    status = Column(String)          # SUCCESS | FAILURE | ABORTED | IN_PROGRESS
+    duration_ms = Column(Integer)
+    build_url = Column(String)
+    log_snippet = Column(Text)       # last 2 KB of console log
+    is_demo = Column(Boolean, default=False)
+
+    # ML prediction (populated at sync time)
+    predicted_failure = Column(Boolean, nullable=True)
+    prediction_confidence = Column(Float, nullable=True)
+    risk_level = Column(String, nullable=True)   # LOW/MEDIUM/HIGH
+    risk_score = Column(Float, nullable=True)
+    recommendation = Column(Text, nullable=True)
+
+    # Tracking: did the prediction match reality?
+    actual_failure = Column(Boolean, nullable=True)   # derived from status
+    prediction_correct = Column(Boolean, nullable=True)
+
+    # Timestamps
+    build_timestamp = Column(DateTime, nullable=True, index=True)
+    synced_at = Column(DateTime, default=datetime.now, index=True)
+
+    def __repr__(self):
+        return (
+            f"<JenkinsBuild(job={self.job_name!r}, "
+            f"#{self.build_number}, status={self.status!r})>"
+        )
