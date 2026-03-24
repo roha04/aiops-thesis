@@ -16,7 +16,8 @@ from db.config import engine
 from db.models import Base
 
 # Import API routers
-from api import analytics, predictions, alerts_metrics
+from api import analytics, predictions, alerts_metrics, analytics_history, jenkins  # ✨ Add this
+
 
 # ==================== SETUP ====================
 
@@ -85,6 +86,8 @@ def health():
 app.include_router(analytics.router)          # /api/analytics/*
 app.include_router(predictions.router)        # /api/predict, /api/predictions, /api/dashboard, /api/train
 app.include_router(alerts_metrics.router)     # /api/alerts, /api/metrics
+app.include_router(analytics_history.router)  # ✨ Add this
+app.include_router(jenkins.router)            # /api/jenkins/*
 
 # ==================== RUN ====================
 

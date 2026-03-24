@@ -4,6 +4,8 @@ import Dashboard from './pages/Dashboard'
 import Predictor from './pages/Predictor'
 import Analytics from './pages/Analytics'
 import Alerts from './pages/Alerts'
+import AnalyticsHistory from './pages/Analytics_History'
+import Jenkins from './pages/Jenkins'
 import axios from 'axios'
 
 function App() {
@@ -32,6 +34,8 @@ function App() {
       {page === 'predictor' && <Predictor />}
       {page === 'analytics' && <Analytics />}
       {page === 'alerts' && <Alerts />}
+      {page === 'analytics-history' && <AnalyticsHistory />}
+      {page === 'jenkins' && <Jenkins />}
     </Layout>
   )
 }
