@@ -9,10 +9,11 @@ Run from the backend/ directory:
 import pytest
 import numpy as np
 
-from ml.anomaly import LogAnomalyDetector
+from ml.anomaly import LogAnomalyDetector, _tokenize
 from ml.forecaster import PipelineFailureForecaster
 from ml.pipeline import AIOpsPredictor
 from ml.analytics import ModelAnalytics
+from ml.lstm_detector import LSTMLogDetector, SimpleVocab, _tokenize_line, _TORCH_AVAILABLE
 
 
 # ════════════════════════════════════════════════════════
@@ -32,6 +33,24 @@ NORMAL_LOGS = [
     "Pipeline finished in 4 m 12 s.",
     "INFO: Compilation complete.",
     "INFO: Test suite finished.",
+    "INFO: Starting container on port 8080.",
+    "INFO: Health check passed for service auth.",
+    "INFO: Cache warm-up complete, 512 entries loaded.",
+    "INFO: Scheduled job ran successfully.",
+    "INFO: Rate limiter configured, 1000 req/s.",
+    "INFO: Config loaded from environment.",
+    "INFO: Database migration applied: v42.",
+    "INFO: Artefact uploaded to S3 bucket.",
+    "INFO: CDN invalidation triggered.",
+    "INFO: Worker pool started, 4 threads.",
+    "INFO: Feature flag evaluation complete.",
+    "INFO: Circuit breaker CLOSED – service recovered.",
+    "INFO: Autoscaling event: 3 replicas → 4 replicas.",
+    "INFO: Security scan: 0 critical vulnerabilities.",
+    "INFO: Backup completed successfully in 12 s.",
+    "INFO: Log rotation triggered, old files archived.",
+    "INFO: API gateway routing updated.",
+    "INFO: Deployment complete, rollout 100%.",
 ]
 
 ERROR_LOGS = [
@@ -47,6 +66,24 @@ ERROR_LOGS = [
     "CRITICAL: SSL certificate expired",
     "TIMEOUT: health-check endpoint did not respond within 10 s",
     "ERROR: stack overflow detected in worker thread",
+    "FATAL: segmentation fault in process 1024",
+    "ERROR: failed to acquire distributed lock after 5 retries",
+    "CRITICAL: downstream dependency unreachable: payment-service",
+    "ERROR: authentication token expired, request rejected",
+    "FATAL: database replication lag exceeded 60 s",
+    "ERROR: container OOMKilled by kubelet",
+    "CRITICAL: CPU throttling detected on core 0",
+    "ERROR: request queue overflow, dropping messages",
+    "FATAL: leader election failed, no quorum",
+    "ERROR: TLS handshake failure: certificate mismatch",
+    "CRITICAL: data corruption detected in shard 3",
+    "ERROR: message broker partition offline",
+    "FATAL: dependency injection failed for bean AuthService",
+    "ERROR: exceeded max retry limit for job 7f3a",
+    "CRITICAL: health probe failed 3 consecutive times",
+    "ERROR: pod CrashLoopBackOff: exit code 137",
+    "FATAL: unhandled exception in main thread",
+    "CRITICAL: service degraded – p99 latency > 5 s",
 ]
 
 
@@ -54,46 +91,40 @@ ERROR_LOGS = [
 # LogAnomalyDetector – unit tests
 # ════════════════════════════════════════════════════════
 
-class TestLogAnomalyDetectorFeatureExtraction:
+class TestLogTokenizer:
+    """Tests for the TF-IDF preprocessing function that replaced _extract_features."""
 
-    def setup_method(self):
-        self.detector = LogAnomalyDetector()
+    def test_returns_string(self):
+        assert isinstance(_tokenize("INFO: build started"), str)
 
-    def test_returns_list_of_correct_length(self):
-        features = self.detector._extract_features("INFO: build started")
-        assert isinstance(features, list)
-        assert len(features) == 7
+    def test_normal_log_has_no_error_keyword_in_output(self):
+        result = _tokenize("All tests passed successfully.")
+        assert "error" not in result
 
-    def test_normal_log_has_no_error_keyword(self):
-        features = self.detector._extract_features("All tests passed successfully.")
-        assert features[0] == 0  # has_error_keyword
-        assert features[1] == 0  # error_keyword_count
+    def test_error_keyword_preserved_as_token(self):
+        result = _tokenize("ERROR: connection refused")
+        assert "error" in result
 
-    def test_error_log_sets_error_keyword_flag(self):
-        features = self.detector._extract_features("ERROR: connection refused")
-        assert features[0] == 1  # has_error_keyword
-        assert features[1] >= 1  # error_keyword_count
+    def test_numbers_replaced_with_num_token(self):
+        result = _tokenize("port 8080 timeout 30")
+        assert "<num>" in result
+        assert "8080" not in result
 
-    def test_multiple_errors_counted(self):
-        features = self.detector._extract_features("ERROR: db down. FATAL: oom. CRITICAL: crash.")
-        assert features[1] >= 3  # error_keyword_count
+    def test_ip_replaced_with_ip_token(self):
+        result = _tokenize("connect to 192.168.1.1")
+        assert "<ip>" in result
 
-    def test_warning_flag_detected(self):
-        features = self.detector._extract_features("WARNING: memory usage 90%")
-        assert features[2] == 1  # has_warning
+    def test_hex_replaced_with_hex_token(self):
+        result = _tokenize("memory 0xdeadbeef")
+        assert "<hex>" in result
 
-    def test_info_flag_detected(self):
-        features = self.detector._extract_features("INFO: service started")
-        assert features[3] == 1  # has_info
+    def test_lowercase_normalisation(self):
+        result = _tokenize("FATAL CRITICAL")
+        assert "FATAL" not in result
+        assert "fatal" in result
 
-    def test_log_length_captured(self):
-        short = self.detector._extract_features("ok")
-        long = self.detector._extract_features("a" * 500)
-        assert long[4] > short[4]  # log_length
-
-    def test_number_count(self):
-        features = self.detector._extract_features("port 8080 timeout 30 retry 3")
-        assert features[6] >= 3  # number_count
+    def test_empty_string(self):
+        assert _tokenize("") == ""
 
 
 class TestLogAnomalyDetectorPredict:
@@ -133,32 +164,57 @@ class TestLogAnomalyDetectorPredict:
 
 
 class TestLogAnomalyDetectorTrain:
+    """Tests for the supervised TF-IDF training pipeline."""
+
+    # Use enough data so TF-IDF + cross-val is meaningful
+    ALL_LOGS   = NORMAL_LOGS + ERROR_LOGS
+    ALL_LABELS = [0] * len(NORMAL_LOGS) + [1] * len(ERROR_LOGS)
 
     def setup_method(self):
         self.detector = LogAnomalyDetector()
 
-    def test_train_with_too_few_logs_returns_false(self):
-        assert self.detector.train(["only one log"]) is False
+    def test_train_with_too_few_logs_returns_empty_dict(self):
+        result = self.detector.train(["only one log"], [0])
+        assert result == {}
 
-    def test_train_with_nine_logs_returns_false(self):
-        assert self.detector.train(NORMAL_LOGS[:9]) is False
+    def test_train_with_nine_logs_returns_empty_dict(self):
+        result = self.detector.train(NORMAL_LOGS[:9], [0] * 9)
+        assert result == {}
 
-    def test_train_with_sufficient_logs_returns_true(self):
-        result = self.detector.train(NORMAL_LOGS + ERROR_LOGS)
-        assert result is True
+    def test_train_with_sufficient_logs_returns_dict(self):
+        result = self.detector.train(self.ALL_LOGS, self.ALL_LABELS)
+        assert isinstance(result, dict)
+        assert len(result) > 0
+
+    def test_cv_f1_present_for_each_model(self):
+        result = self.detector.train(self.ALL_LOGS, self.ALL_LABELS)
+        for model_name, metrics in result.items():
+            assert "cv_f1_mean" in metrics, f"cv_f1_mean missing for {model_name}"
+            assert 0.0 <= metrics["cv_f1_mean"] <= 1.0
 
     def test_is_trained_after_successful_train(self):
-        self.detector.train(NORMAL_LOGS + ERROR_LOGS)
+        self.detector.train(self.ALL_LOGS, self.ALL_LABELS)
         assert self.detector.is_trained is True
 
-    def test_model_is_set_after_train(self):
-        self.detector.train(NORMAL_LOGS + ERROR_LOGS)
-        assert self.detector.model is not None
+    def test_classifiers_dict_populated_after_train(self):
+        self.detector.train(self.ALL_LOGS, self.ALL_LABELS)
+        assert len(self.detector.classifiers) >= 2  # at least LR + RF
+
+    def test_best_model_name_set_after_train(self):
+        self.detector.train(self.ALL_LOGS, self.ALL_LABELS)
+        assert self.detector.best_model_name in self.detector.classifiers
 
     def test_predict_after_train_still_catches_errors(self):
-        self.detector.train(NORMAL_LOGS + ERROR_LOGS)
+        self.detector.train(self.ALL_LOGS, self.ALL_LABELS)
         result = self.detector.predict("ERROR: fatal crash")
         assert result["is_anomaly"] is True
+
+    def test_get_feature_importance_returns_lists(self):
+        self.detector.train(self.ALL_LOGS, self.ALL_LABELS)
+        fi = self.detector.get_feature_importance()
+        assert "features" in fi and "importance" in fi
+        assert len(fi["features"]) == len(fi["importance"])
+        assert len(fi["features"]) > 0
 
 
 # ════════════════════════════════════════════════════════
@@ -355,3 +411,175 @@ class TestModelAnalytics:
         result = self.analytics.calculate_precision_recall(self.y_true, self.y_scores)
         assert len(result["precision"]) > 0
         assert len(result["recall"]) > 0
+
+
+# ════════════════════════════════════════════════════════
+# LSTMLogDetector — unit tests
+# ════════════════════════════════════════════════════════
+
+# 30 successful builds (all normal lines)
+_NORMAL_SEQ = [
+    [
+        "INFO [auth-service] Build started for branch main",
+        "INFO [db-worker] Running unit tests...",
+        "INFO [api-gateway] Tests passed (248/248)",
+        "INFO [build-runner] Building Docker image v1.2.3",
+        "INFO [deploy-agent] Deployment initiated on staging",
+        "INFO [auth-service] Health checks passing",
+        "INFO [cache-manager] Service started on port 8080",
+        "INFO [scheduler] Connected to database successfully",
+        "INFO [metrics-collector] Configuration loaded from environment",
+        "INFO [log-aggregator] All services healthy",
+    ]
+    * 3   # repeat to hit 30 lines (truncated to SEQ_LEN=20 internally)
+    for _ in range(30)
+]
+
+# 20 failed builds (7 normal → 3 error — escalation pattern)
+_FAILURE_SEQ = [
+    [
+        "INFO [auth-service] Build started for branch main",
+        "INFO [db-worker] Running unit tests...",
+        "INFO [api-gateway] Tests passed (248/248)",
+        "INFO [build-runner] Building Docker image v1.2.3",
+        "INFO [deploy-agent] Deployment initiated on staging",
+        "INFO [auth-service] Health checks passing",
+        "INFO [cache-manager] Service started on port 8080",
+        "ERROR [db-worker] Database connection timeout after 30s",
+        "FATAL [api-gateway] Cannot connect to primary DB — failover failed",
+        "CRITICAL [auth-service] OOM killer triggered — container restarting",
+    ]
+    for _ in range(20)
+]
+
+_ALL_SEQS   = _NORMAL_SEQ + _FAILURE_SEQ
+_ALL_LABELS = [0] * 30 + [1] * 20
+
+
+class TestSimpleVocab:
+    """Tests for the vocabulary builder."""
+
+    def test_len_includes_pad_and_unk(self):
+        v = SimpleVocab()
+        assert len(v) == 2
+
+    def test_build_adds_tokens(self):
+        v = SimpleVocab(min_freq=1)
+        v.build([[["hello", "world"]]])
+        assert "hello" in v.token2id
+        assert "world" in v.token2id
+
+    def test_min_freq_filters_rare_tokens(self):
+        v = SimpleVocab(min_freq=2)
+        v.build([[["rare"]], [["common", "common"]]])
+        assert "rare" not in v.token2id
+        assert "common" in v.token2id
+
+    def test_encode_returns_ints(self):
+        v = SimpleVocab(min_freq=1)
+        v.build([[["hello"]]])
+        ids = v.encode(["hello", "missing"])
+        assert isinstance(ids[0], int)
+        assert ids[1] == v.token2id["<unk>"]
+
+
+class TestLSTMTokenizeLine:
+    """Tests for the per-line tokeniser in lstm_detector."""
+
+    def test_returns_list_of_strings(self):
+        assert isinstance(_tokenize_line("INFO build started"), list)
+
+    def test_numbers_become_num_token(self):
+        tokens = _tokenize_line("port 8080")
+        assert "<num>" in tokens
+        assert "8080" not in tokens
+
+    def test_ip_becomes_ip_token(self):
+        tokens = _tokenize_line("host 10.0.0.1")
+        assert "<ip>" in tokens
+
+    def test_lowercases_input(self):
+        tokens = _tokenize_line("FATAL ERROR")
+        assert "fatal" in tokens and "error" in tokens
+
+    def test_empty_string_returns_empty_list(self):
+        assert _tokenize_line("") == []
+
+
+@pytest.mark.skipif(not _TORCH_AVAILABLE, reason="PyTorch not installed")
+class TestLSTMLogDetectorTrain:
+    """Tests for LSTMLogDetector training (requires PyTorch)."""
+
+    def test_too_few_sequences_returns_empty_list(self):
+        det = LSTMLogDetector()
+        result = det.train([["log line"]], [0])
+        assert result == []
+
+    def test_train_returns_list_of_epoch_dicts(self):
+        det = LSTMLogDetector()
+        result = det.train(_ALL_SEQS, _ALL_LABELS, epochs=2)
+        assert isinstance(result, list)
+        assert len(result) == 2
+
+    def test_each_epoch_has_required_keys(self):
+        det = LSTMLogDetector()
+        result = det.train(_ALL_SEQS, _ALL_LABELS, epochs=2)
+        for m in result:
+            for key in ("epoch", "train_loss", "val_loss", "accuracy", "f1_score"):
+                assert key in m, f"Key '{key}' missing from epoch metrics"
+
+    def test_train_loss_decreases_or_stays_low(self):
+        det = LSTMLogDetector()
+        result = det.train(_ALL_SEQS, _ALL_LABELS, epochs=3)
+        assert result[-1]["train_loss"] < 2.0   # sanity check, not threshold
+
+    def test_is_trained_flag_set_after_train(self):
+        det = LSTMLogDetector()
+        det.train(_ALL_SEQS, _ALL_LABELS, epochs=2)
+        assert det.is_trained is True
+
+    def test_epoch_metrics_stored_on_instance(self):
+        det = LSTMLogDetector()
+        det.train(_ALL_SEQS, _ALL_LABELS, epochs=2)
+        assert len(det.epoch_metrics) == 2
+
+    def test_evaluate_returns_metrics_dict(self):
+        det = LSTMLogDetector()
+        det.train(_ALL_SEQS, _ALL_LABELS, epochs=2)
+        m = det.evaluate(_ALL_SEQS[:10], _ALL_LABELS[:10])
+        assert isinstance(m, dict)
+        for key in ("accuracy", "precision", "recall", "f1_score", "roc_auc"):
+            assert key in m
+
+    def test_roc_auc_in_valid_range(self):
+        det = LSTMLogDetector()
+        det.train(_ALL_SEQS, _ALL_LABELS, epochs=2)
+        m = det.evaluate(_ALL_SEQS, _ALL_LABELS)
+        assert 0.0 <= m["roc_auc"] <= 1.0
+
+
+@pytest.mark.skipif(not _TORCH_AVAILABLE, reason="PyTorch not installed")
+class TestLSTMLogDetectorPredict:
+    """Tests for LSTMLogDetector prediction (requires PyTorch)."""
+
+    def setup_method(self):
+        self.det = LSTMLogDetector()
+        self.det.train(_ALL_SEQS, _ALL_LABELS, epochs=2)
+
+    def test_predict_returns_required_keys(self):
+        result = self.det.predict(_FAILURE_SEQ[0])
+        for key in ("failure_probability", "is_failure", "confidence", "model"):
+            assert key in result
+
+    def test_failure_probability_in_range(self):
+        result = self.det.predict(_FAILURE_SEQ[0])
+        assert 0.0 <= result["failure_probability"] <= 1.0
+
+    def test_model_label_is_lstm(self):
+        result = self.det.predict(_NORMAL_SEQ[0])
+        assert result["model"] == "lstm"
+
+    def test_untrained_detector_returns_disabled(self):
+        det = LSTMLogDetector()
+        result = det.predict(["just one line"])
+        assert result["model"] == "lstm_disabled"

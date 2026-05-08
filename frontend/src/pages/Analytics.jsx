@@ -312,24 +312,83 @@ export default function Analytics() {
       {/* Model Comparison */}
       {modelComparison?.comparison && modelComparison.comparison.length > 0 ? (
         <div className="bg-gray-800 p-6 rounded border border-gray-700">
-          <h2 className="text-xl font-bold mb-4">📉 Model Version Comparison</h2>
-          <ResponsiveContainer width="100%" height={300}>
+          <h2 className="text-xl font-bold mb-1">📉 Classifier Comparison (Latest Training Run)</h2>
+          {modelComparison.training_run && (
+            <p className="text-xs text-gray-400 mb-4">Run: {modelComparison.training_run}</p>
+          )}
+          <ResponsiveContainer width="100%" height={320}>
             <ComposedChart data={modelComparison.comparison}>
               <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-              <XAxis stroke="#666" dataKey="version" />
-              <YAxis stroke="#666" />
-              <Tooltip contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151' }} />
+              <XAxis stroke="#666" dataKey="name" tick={{ fontSize: 12 }} />
+              <YAxis stroke="#666" domain={[0, 1]} tickFormatter={v => `${(v*100).toFixed(0)}%`} />
+              <Tooltip
+                contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151' }}
+                formatter={(value, name) => [`${(value * 100).toFixed(2)}%`, name]}
+              />
               <Legend />
-              <Bar dataKey="accuracy" fill="#10b981" name="Accuracy" />
+              <Bar dataKey="accuracy"  fill="#10b981" name="Accuracy" />
               <Bar dataKey="precision" fill="#f59e0b" name="Precision" />
-              <Bar dataKey="recall" fill="#ef4444" name="Recall" />
-              <Line type="monotone" dataKey="f1_score" stroke="#8b5cf6" strokeWidth={2} name="F1 Score" />
+              <Bar dataKey="recall"    fill="#ef4444" name="Recall" />
+              <Line type="monotone" dataKey="f1_score"   stroke="#8b5cf6" strokeWidth={2} name="F1 Score" dot={{ r: 5 }} />
+              <Line type="monotone" dataKey="roc_auc"    stroke="#06b6d4" strokeWidth={2} name="ROC-AUC" dot={{ r: 5 }} />
+              <Line type="monotone" dataKey="cv_f1_mean" stroke="#f97316" strokeWidth={2} strokeDasharray="5 5" name="CV F1 (5-fold)" dot={{ r: 4 }} />
             </ComposedChart>
           </ResponsiveContainer>
+
+          {/* Per-model card summary */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mt-6">
+            {modelComparison.comparison.map((m) => (
+              <div
+                key={m.name}
+                className={`p-4 rounded border ${
+                  m.is_best
+                    ? 'border-green-500 bg-green-900/20'
+                    : 'border-gray-600 bg-gray-700/30'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <p className="font-semibold text-sm">{m.name}</p>
+                  {m.is_best && (
+                    <span className="text-xs bg-green-600 px-2 py-0.5 rounded">BEST</span>
+                  )}
+                </div>
+                <div className="space-y-1 text-xs text-gray-300">
+                  <div className="flex justify-between">
+                    <span>F1 Score</span>
+                    <span className="font-bold text-white">{(m.f1_score * 100).toFixed(2)}%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>ROC-AUC</span>
+                    <span className="font-bold text-cyan-400">{(m.roc_auc * 100).toFixed(2)}%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>CV F1 (5-fold)</span>
+                    <span className="font-bold text-orange-400">
+                      {m.cv_f1_mean
+                        ? `${(m.cv_f1_mean * 100).toFixed(2)}% ± ${m.cv_f1_std ? (m.cv_f1_std * 100).toFixed(2) : '?'}%`
+                        : 'N/A (sequence model)'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Accuracy</span>
+                    <span>{(m.accuracy * 100).toFixed(2)}%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Precision</span>
+                    <span>{(m.precision * 100).toFixed(2)}%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Recall</span>
+                    <span>{(m.recall * 100).toFixed(2)}%</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       ) : (
         <div className="bg-gray-800 p-6 rounded border border-gray-700">
-          <p className="text-gray-400">📉 Model Comparison data not available</p>
+          <p className="text-gray-400">📉 No model comparison data yet — run training first.</p>
         </div>
       )}
 

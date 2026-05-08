@@ -195,6 +195,44 @@ class SystemMetrics(Base):
 
 # ==================== JENKINS INTEGRATION ====================
 
+class MultiModelMetrics(Base):
+    """Per-classifier metrics from each supervised training run."""
+    __tablename__ = "multi_model_metrics"
+
+    id             = Column(Integer, primary_key=True, index=True)
+    model_name     = Column(String, index=True)   # Logistic Regression / Random Forest / XGBoost
+    training_run   = Column(String, index=True)   # timestamp run-id, groups models trained together
+
+    # 5-fold CV metrics
+    cv_f1_mean        = Column(Float)
+    cv_f1_std         = Column(Float)
+    cv_precision_mean = Column(Float)
+    cv_recall_mean    = Column(Float)
+    cv_accuracy_mean  = Column(Float)
+
+    # Held-out test metrics
+    accuracy  = Column(Float)
+    precision = Column(Float)
+    recall    = Column(Float)
+    f1_score  = Column(Float)
+    roc_auc   = Column(Float)
+
+    # Confusion matrix counts
+    true_positives  = Column(Integer)
+    true_negatives  = Column(Integer)
+    false_positives = Column(Integer)
+    false_negatives = Column(Integer)
+
+    # Dataset info
+    training_samples = Column(Integer)
+    test_samples     = Column(Integer)
+
+    # Feature importance JSON (populated only for Random Forest)
+    feature_importance_json = Column(JSON, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.now, index=True)
+
+
 class JenkinsBuild(Base):
     """Stores Jenkins build data with ML prediction and actual outcome."""
     __tablename__ = "jenkins_builds"

@@ -6,9 +6,9 @@ import logging
 import numpy as np
 from sklearn.metrics import roc_curve, auc, precision_recall_curve
 
-from db.config import get_db  # ✨ Changed from ..db.config
-from db.models import Prediction, Alert, ModelMetrics  # ✨ Changed
-from ml.analytics import ModelAnalytics  # ✨ Changed
+from db.config import get_db
+from db.models import Prediction, Alert, ModelMetrics, MultiModelMetrics
+from ml.analytics import ModelAnalytics
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
@@ -257,85 +257,93 @@ def get_precision_recall(db: Session = Depends(get_db)):
 # ==================== FEATURE IMPORTANCE ====================
 
 @router.get("/feature-importance")
-def get_feature_importance():
-    """Get feature importance for anomaly detection"""
+def get_feature_importance(db: Session = Depends(get_db)):
+    """Real feature importance from the Random Forest TF-IDF model."""
     try:
-        logger.info("🎯 Fetching feature importance...")
-        
-        features = [
-            "has_error_keyword",
-            "error_keyword_count",
-            "has_warning",
-            "has_info",
-            "log_length",
-            "special_char_ratio",
-            "number_count"
-        ]
-        
-        importance = [0.35, 0.28, 0.15, 0.08, 0.07, 0.04, 0.03]
-        
-        features_with_importance = list(zip(features, importance))
-        features_with_importance.sort(key=lambda x: x[1], reverse=True)
-        
-        result = {
-            "feature_importance": {
-                "features": [f[0] for f in features_with_importance],
-                "importance": [float(f[1]) for f in features_with_importance]
+        # Latest RF entry that has stored feature importance
+        rf_row = (
+            db.query(MultiModelMetrics)
+            .filter(
+                MultiModelMetrics.model_name == "Random Forest",
+                MultiModelMetrics.feature_importance_json.isnot(None),
+            )
+            .order_by(MultiModelMetrics.created_at.desc())
+            .first()
+        )
+
+        if rf_row and rf_row.feature_importance_json:
+            fi = rf_row.feature_importance_json
+            return {
+                "feature_importance": {
+                    "features":   fi.get("features", []),
+                    "importance": fi.get("importance", []),
+                }
             }
-        }
-        
-        logger.info(f"✅ Feature importance ready")
-        return result
-        
-    except Exception as e:
-        logger.error(f"❌ Feature importance error: {e}")
+
+        # Fallback — model not yet trained
         return {
             "feature_importance": {
-                "features": [],
-                "importance": []
+                "features":   [],
+                "importance": [],
+                "message": "Train the model first to see real feature importance.",
             }
         }
+
+    except Exception as exc:
+        logger.error(f"Feature importance error: {exc}")
+        return {"feature_importance": {"features": [], "importance": []}}
 
 
 # ==================== MODEL COMPARISON ====================
 
 @router.get("/model-comparison")
 def get_model_comparison(db: Session = Depends(get_db)):
-    """Compare different model versions"""
+    """
+    Compare the three classifiers (LR, RF, XGBoost) from the latest training run.
+    Returns real metrics from MultiModelMetrics, not hardcoded values.
+    """
     try:
-        logger.info("📉 Fetching model comparison...")
-        
-        all_metrics = db.query(ModelMetrics).order_by(
-            ModelMetrics.created_at.desc()
-        ).limit(5).all()
-        
-        if not all_metrics:
-            logger.warning("   No metrics, returning defaults")
+        # Find the most recent training run
+        latest = (
+            db.query(MultiModelMetrics.training_run)
+            .order_by(MultiModelMetrics.created_at.desc())
+            .first()
+        )
+
+        if not latest:
             return {
-                "comparison": [
-                    {"version": "v1.0", "accuracy": 0.85, "precision": 0.82, "recall": 0.88, "f1_score": 0.85},
-                    {"version": "v1.1", "accuracy": 0.88, "precision": 0.86, "recall": 0.90, "f1_score": 0.88},
-                    {"version": "v1.2", "accuracy": 0.91, "precision": 0.89, "recall": 0.92, "f1_score": 0.90}
-                ]
+                "comparison": [],
+                "message": "No trained models found. Run /api/train first.",
             }
-        
+
+        run_id = latest[0]
+        rows = (
+            db.query(MultiModelMetrics)
+            .filter(MultiModelMetrics.training_run == run_id)
+            .order_by(MultiModelMetrics.f1_score.desc())
+            .all()
+        )
+
+        # Identify best model by F1
+        best_f1 = max(r.f1_score for r in rows) if rows else 0
+
         comparison = []
-        for i, metrics in enumerate(reversed(all_metrics)):
+        for row in rows:
             comparison.append({
-                "version": f"v{metrics.model_version or i+1}",
-                "accuracy": float(metrics.accuracy),
-                "precision": float(metrics.precision),
-                "recall": float(metrics.recall),
-                "f1_score": float(metrics.f1_score)
+                "name":         row.model_name,
+                "accuracy":     float(row.accuracy),
+                "precision":    float(row.precision),
+                "recall":       float(row.recall),
+                "f1_score":     float(row.f1_score),
+                "roc_auc":      float(row.roc_auc) if row.roc_auc else 0.0,
+                "cv_f1_mean":   float(row.cv_f1_mean) if row.cv_f1_mean else 0.0,
+                "cv_f1_std":    float(row.cv_f1_std) if row.cv_f1_std else 0.0,
+                "is_best":      float(row.f1_score) >= best_f1,
+                "training_run": row.training_run,
             })
-        
-        logger.info(f"✅ Model comparison ready: {len(comparison)} versions")
-        return {"comparison": comparison}
-        
-    except Exception as e:
-        logger.error(f"❌ Model comparison error: {e}")
-        return {
-            "comparison": [
-                {"version": "v1.0", "accuracy": 0.85, "precision": 0.82, "recall": 0.88, "f1_score": 0.85}
-            ]
-        }
+
+        return {"comparison": comparison, "training_run": run_id}
+
+    except Exception as exc:
+        logger.error(f"Model comparison error: {exc}")
+        return {"comparison": [], "message": str(exc)}
