@@ -53,7 +53,7 @@ class AIOpsPredictor:
             }
         }
     
-    def train(self, logs_list, failure_history):
-        """Train both models"""
-        self.anomaly_detector.train(logs_list)
+    def train(self, logs_list, labels, failure_history):
+        """Train both models. labels is a list of 0/1 matching logs_list."""
+        self.anomaly_detector.train(logs_list, labels)
         self.forecaster.train(failure_history)
