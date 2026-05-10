@@ -90,11 +90,82 @@ export const PREDICTION_RESULT = {
         { feature: 'info',       shap_value: -0.04, direction: 'normal',  tfidf: 0.10 },
       ],
     },
+    parsed_log: {
+      raw: 'ERROR [db-worker] Database connection timeout after 30s',
+      template: 'ERROR <*> Database connection timeout after <*>',
+      event_id: 'E00007',
+      parameters: ['30s'],
+      log_level: 'ERROR',
+      service: 'db-worker',
+      timestamp: null,
+      timestamp_delta_sec: null,
+    },
     details: {
       log_anomaly: { is_anomaly: true, anomaly_score: -0.8, confidence: 0.9 },
       failure_forecast: { predicted_failures: 3, upper_bound: 5, lower_bound: 1, error: null },
     },
   },
+}
+
+export const PARSE_LOGS_RESULT = {
+  parsed: [
+    {
+      raw: 'INFO [auth-service] Build started for branch main',
+      template: 'INFO <*> Build started for branch <*>',
+      event_id: 'E00000',
+      parameters: ['main'],
+      log_level: 'INFO',
+      service: 'auth-service',
+      timestamp: null,
+      timestamp_delta_sec: null,
+    },
+    {
+      raw: 'ERROR [db-worker] Database connection timeout after 30s',
+      template: 'ERROR <*> Database connection timeout after <*>',
+      event_id: 'E00007',
+      parameters: ['30s'],
+      log_level: 'ERROR',
+      service: 'db-worker',
+      timestamp: null,
+      timestamp_delta_sec: null,
+    },
+  ],
+  summary: {
+    n_lines: 2,
+    n_unique_templates: 2,
+    templates: [
+      {
+        event_id: 'E00000',
+        template: 'INFO <*> Build started for branch <*>',
+        count: 1,
+        examples: ['INFO [auth-service] Build started for branch main'],
+      },
+      {
+        event_id: 'E00007',
+        template: 'ERROR <*> Database connection timeout after <*>',
+        count: 1,
+        examples: ['ERROR [db-worker] Database connection timeout after 30s'],
+      },
+    ],
+  },
+}
+
+export const LOG_TEMPLATES_RESULT = {
+  n_clusters: 24,
+  templates: [
+    {
+      event_id: 'E00000',
+      template: 'INFO <*> Build started for branch <*>',
+      count: 412,
+      examples: ['INFO [auth-service] Build started for branch main'],
+    },
+    {
+      event_id: 'E00007',
+      template: 'ERROR <*> Database connection timeout after <*>',
+      count: 88,
+      examples: ['ERROR [db-worker] Database connection timeout after 30s'],
+    },
+  ],
 }
 
 export const EXPLAIN_RESULT = {
@@ -149,6 +220,14 @@ export const handlers = [
 
   http.post(`${BASE}/api/predict`, () =>
     HttpResponse.json(PREDICTION_RESULT)
+  ),
+
+  http.post(`${BASE}/api/parse-logs`, () =>
+    HttpResponse.json(PARSE_LOGS_RESULT)
+  ),
+
+  http.get(`${BASE}/api/analytics/log-templates`, () =>
+    HttpResponse.json(LOG_TEMPLATES_RESULT)
   ),
 
   http.get(`${BASE}/api/explain/:id`, () =>

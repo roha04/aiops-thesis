@@ -1,7 +1,10 @@
 """
-Log Anomaly Detection — Supervised TF-IDF + Multi-Classifier Pipeline
+Log Anomaly Detection — Supervised TF-IDF + Drain + Multi-Classifier Pipeline
 
 Models    : Logistic Regression, Random Forest, XGBoost
+Features  : TF-IDF tokens **horizontally stacked** with structured features
+            mined by Drain (event template id, log level, service name,
+            parameter count, message length, etc.). See ``ml/log_parser.py``.
 Evaluation: 5-fold stratified cross-validation
 Inference : best model (by CV F1) used at prediction time
 """
@@ -12,6 +15,7 @@ import pickle
 import logging
 
 import numpy as np
+from scipy import sparse
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
@@ -20,6 +24,8 @@ from sklearn.metrics import (
     accuracy_score, precision_score, recall_score,
     f1_score, roc_auc_score, confusion_matrix,
 )
+
+from ml.log_parser import StructuredLogFeaturizer
 
 try:
     from xgboost import XGBClassifier
@@ -90,43 +96,92 @@ class SupervisedLogClassifier:
     """
     Supervised log anomaly classifier.
 
-    Trains Logistic Regression, Random Forest, and XGBoost on TF-IDF
-    features with 5-fold stratified cross-validation, then retains the
-    best model for real-time inference.
+    Trains Logistic Regression, Random Forest, and XGBoost on a hybrid
+    feature representation — TF-IDF tokens stacked with Drain-derived
+    structured features (template id, log level, service, message length,
+    parameter count) — using 5-fold stratified cross-validation. The best
+    model is retained for real-time inference.
+
+    Parameters
+    ----------
+    use_drain_features : bool, default True
+        When True, the classifier consumes ``hstack(TF-IDF, structured)``.
+        When False, only TF-IDF is used (legacy / ablation mode).
     """
 
-    def __init__(self):
+    def __init__(self, use_drain_features: bool = True):
         self.vectorizer = TfidfVectorizer(
             preprocessor=_tokenize,
             ngram_range=(1, 2),
             max_features=5000,
             sublinear_tf=True,
         )
+        self.use_drain_features = use_drain_features
+        self.structured_featurizer: StructuredLogFeaturizer | None = (
+            StructuredLogFeaturizer() if use_drain_features else None
+        )
         self.classifiers: dict = {}
         self.best_model_name: str = "Random Forest"
         self.cv_results: dict = {}
         self.test_metrics: dict = {}
-        self.feature_names: list = []
+        self.feature_names: list = []   # TF-IDF names + structured names
         self.is_trained: bool = False
         # Lazily-built SHAP TreeExplainer wrapping the trained Random Forest.
         # Built on first call to .explain() so training cost is unaffected.
         self._explainer = None
 
+    # ----- feature assembly -------------------------------------------------
+
+    def _build_features(self, logs: list, fit: bool):
+        """
+        Return a sparse feature matrix for the given log lines.
+
+        ``fit=True`` re-fits TF-IDF and the structured featurizer (used during
+        ``train``); ``fit=False`` uses the already-fitted vectorisers.
+        """
+        if fit:
+            X_tfidf = self.vectorizer.fit_transform([_tokenize(l) for l in logs])
+        else:
+            X_tfidf = self.vectorizer.transform([_tokenize(l) for l in logs])
+
+        if not self.use_drain_features or self.structured_featurizer is None:
+            return X_tfidf
+
+        if fit:
+            X_struct = self.structured_featurizer.fit_transform(list(logs))
+        else:
+            X_struct = self.structured_featurizer.transform(list(logs))
+
+        return sparse.hstack([X_tfidf, X_struct], format="csr")
+
+    def _refresh_feature_names(self) -> None:
+        """Rebuild the ordered ``feature_names`` list (TF-IDF + structured)."""
+        names = self.vectorizer.get_feature_names_out().tolist()
+        if self.use_drain_features and self.structured_featurizer is not None:
+            names = names + self.structured_featurizer.feature_names
+        self.feature_names = names
+
     # ----- training --------------------------------------------------------
 
     def train(self, logs: list, labels: list) -> dict:
         """
-        Fit TF-IDF + all classifiers with 5-fold CV, then retrain on full set.
-        Returns per-model CV metrics dict.
+        Fit TF-IDF + Drain featurizer + all classifiers with 5-fold CV,
+        then retrain on the full set. Returns per-model CV metrics dict.
         """
         if len(logs) < 50:
             logger.warning("Need at least 50 samples; skipping training.")
             return {}
 
-        logger.info(f"Fitting TF-IDF on {len(logs)} samples ...")
-        X = self.vectorizer.fit_transform([_tokenize(l) for l in logs])
+        logger.info(f"Fitting feature pipeline on {len(logs)} samples ...")
+        X = self._build_features(logs, fit=True)
         y = np.array(labels)
-        self.feature_names = self.vectorizer.get_feature_names_out().tolist()
+        self._refresh_feature_names()
+        if self.use_drain_features and self.structured_featurizer is not None:
+            logger.info(
+                "  TF-IDF features: %d, Drain templates discovered: %d",
+                len(self.vectorizer.get_feature_names_out()),
+                self.structured_featurizer.parser.n_clusters,
+            )
 
         cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
         clfs = _build_classifiers()
@@ -175,7 +230,7 @@ class SupervisedLogClassifier:
         """Compute held-out test metrics for every trained classifier."""
         if not self.is_trained:
             return {}
-        X = self.vectorizer.transform([_tokenize(l) for l in logs])
+        X = self._build_features(logs, fit=False)
         y = np.array(labels)
         metrics = {}
         for name, clf in self.classifiers.items():
@@ -271,7 +326,7 @@ class SupervisedLogClassifier:
             return {}
 
         try:
-            x_sparse = self.vectorizer.transform([_tokenize(log_text)])
+            x_sparse = self._build_features([log_text], fit=False)
             x_dense = x_sparse.toarray()
             sv = explainer.shap_values(x_dense)
             shap_vals = self._normalise_shap_output(sv, n_features=x_dense.shape[1])
@@ -323,16 +378,17 @@ class SupervisedLogClassifier:
         if not self.is_trained:
             return self._keyword_fallback(log_text)
         try:
-            X = self.vectorizer.transform([_tokenize(log_text)])
+            X = self._build_features([log_text], fit=False)
             clf = self.classifiers[self.best_model_name]
             pred = int(clf.predict(X)[0])
             prob = clf.predict_proba(X)[0]
             is_anomaly = pred == 1
+            feat_label = "TF-IDF + Drain" if self.use_drain_features else "TF-IDF"
             return {
                 "is_anomaly":    is_anomaly,
                 "anomaly_score": float(prob[1] - prob[0]),
                 "confidence":    float(prob[1] if is_anomaly else prob[0]),
-                "reason":        f"Classified by {self.best_model_name} (TF-IDF)",
+                "reason":        f"Classified by {self.best_model_name} ({feat_label})",
                 "model_used":    self.best_model_name,
                 "error":         None,
             }
@@ -340,18 +396,32 @@ class SupervisedLogClassifier:
             logger.error(f"Prediction error: {exc}")
             return self._keyword_fallback(log_text)
 
+    def parse_log(self, log_text: str):
+        """Expose the underlying Drain parser for the API layer."""
+        if self.structured_featurizer is None:
+            return None
+        return self.structured_featurizer.parser.parse_line(log_text)
+
+    def get_log_templates(self, top_k: int = 25):
+        """Top discovered Drain templates ordered by frequency."""
+        if self.structured_featurizer is None:
+            return []
+        return self.structured_featurizer.parser.get_clusters(top_k=top_k)
+
     # ----- persistence -----------------------------------------------------
 
     def _save(self):
         path = os.path.join(MODELS_DIR, "supervised_classifier.pkl")
         with open(path, "wb") as fh:
             pickle.dump({
-                "vectorizer":      self.vectorizer,
-                "classifiers":     self.classifiers,
-                "best_model_name": self.best_model_name,
-                "cv_results":      self.cv_results,
-                "test_metrics":    self.test_metrics,
-                "feature_names":   self.feature_names,
+                "vectorizer":           self.vectorizer,
+                "structured_featurizer": self.structured_featurizer,
+                "use_drain_features":   self.use_drain_features,
+                "classifiers":          self.classifiers,
+                "best_model_name":      self.best_model_name,
+                "cv_results":           self.cv_results,
+                "test_metrics":         self.test_metrics,
+                "feature_names":        self.feature_names,
             }, fh)
         logger.info(f"Saved classifier bundle -> {path}")
 
@@ -360,15 +430,26 @@ class SupervisedLogClassifier:
         try:
             with open(path, "rb") as fh:
                 data = pickle.load(fh)
-            self.vectorizer      = data["vectorizer"]
-            self.classifiers     = data["classifiers"]
-            self.best_model_name = data["best_model_name"]
-            self.cv_results      = data.get("cv_results", {})
-            self.test_metrics    = data.get("test_metrics", {})
-            self.feature_names   = data.get("feature_names", [])
-            self.is_trained      = True
-            self._explainer      = None  # rebuild lazily on first explain() call
-            logger.info(f"Loaded classifier (best = {self.best_model_name})")
+            self.vectorizer           = data["vectorizer"]
+            self.classifiers          = data["classifiers"]
+            self.best_model_name      = data["best_model_name"]
+            self.cv_results           = data.get("cv_results", {})
+            self.test_metrics         = data.get("test_metrics", {})
+            self.feature_names        = data.get("feature_names", [])
+            self.structured_featurizer = data.get("structured_featurizer")
+            # Backward-compat: bundles saved before Drain integration won't
+            # have a structured featurizer — keep the classifier in TF-IDF-only
+            # mode so old pickles still load cleanly.
+            self.use_drain_features   = data.get(
+                "use_drain_features",
+                self.structured_featurizer is not None,
+            )
+            self.is_trained           = True
+            self._explainer           = None  # rebuild lazily on first explain() call
+            logger.info(
+                f"Loaded classifier (best = {self.best_model_name}, "
+                f"drain={self.use_drain_features})"
+            )
             return True
         except FileNotFoundError:
             logger.warning("No saved classifier found — run /api/train first.")

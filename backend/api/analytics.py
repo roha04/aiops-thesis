@@ -1,4 +1,4 @@
-"""Analytics Endpoints - ROC, Confusion Matrix, Feature Importance, Model Comparison"""
+"""Analytics Endpoints - ROC, Confusion Matrix, Feature Importance, Model Comparison, Log Templates"""
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -9,6 +9,8 @@ from sklearn.metrics import roc_curve, auc, precision_recall_curve
 from db.config import get_db
 from db.models import Prediction, Alert, ModelMetrics, MultiModelMetrics
 from ml.analytics import ModelAnalytics
+# Reuse the singleton predictor so template ids match those served by /api/predict.
+from api.predictions import predictor as _predictor
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
@@ -347,3 +349,38 @@ def get_model_comparison(db: Session = Depends(get_db)):
     except Exception as exc:
         logger.error(f"Model comparison error: {exc}")
         return {"comparison": [], "message": str(exc)}
+
+
+# ==================== LOG TEMPLATES (DRAIN) ====================
+
+@router.get("/log-templates")
+def get_log_templates(top_k: int = 25):
+    """
+    Top log templates discovered by the Drain parser, ordered by frequency.
+
+    Returns
+    -------
+    ``{"templates": [{"event_id", "template", "count", "examples"}, ...],
+        "n_clusters": int}``
+
+    Empty list if the supervised classifier hasn't been trained yet.
+    """
+    try:
+        det = _predictor.anomaly_detector
+        if not det.is_trained or det.structured_featurizer is None:
+            return {
+                "templates":  [],
+                "n_clusters": 0,
+                "message": (
+                    "No Drain templates yet. Train the supervised model "
+                    "via POST /api/train to populate this endpoint."
+                ),
+            }
+        clusters = det.get_log_templates(top_k=top_k)
+        return {
+            "templates":  clusters,
+            "n_clusters": det.structured_featurizer.parser.n_clusters,
+        }
+    except Exception as exc:
+        logger.error(f"Log templates error: {exc}")
+        return {"templates": [], "n_clusters": 0, "message": str(exc)}

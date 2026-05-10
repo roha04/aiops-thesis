@@ -102,3 +102,47 @@ describe('Predictor – API call and result rendering', () => {
     })
   })
 })
+
+describe('Predictor – Drain parsed-log card', () => {
+  it('renders the parsed-log card after a prediction', async () => {
+    render(<Predictor />)
+    fireEvent.click(screen.getByRole('button', { name: /predict/i }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('parsed-log-card')).toBeInTheDocument()
+    })
+  })
+
+  it('shows the Drain event template and id from the response', async () => {
+    render(<Predictor />)
+    fireEvent.click(screen.getByRole('button', { name: /predict/i }))
+
+    await waitFor(() => {
+      const tmpl = screen.getByTestId('parsed-template')
+      expect(tmpl).toHaveTextContent('Database connection timeout')
+      expect(tmpl).toHaveTextContent('<*>')
+      expect(screen.getByTestId('parsed-event-id')).toHaveTextContent('E00007')
+    })
+  })
+
+  it('shows the extracted log level and service', async () => {
+    render(<Predictor />)
+    fireEvent.click(screen.getByRole('button', { name: /predict/i }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('parsed-level')).toHaveTextContent('ERROR')
+      expect(screen.getByTestId('parsed-service')).toHaveTextContent('db-worker')
+    })
+  })
+
+  it('renders extracted parameters as chips', async () => {
+    render(<Predictor />)
+    fireEvent.click(screen.getByRole('button', { name: /predict/i }))
+
+    await waitFor(() => {
+      const params = screen.getByTestId('parsed-parameters')
+      expect(params).toBeInTheDocument()
+      expect(params).toHaveTextContent('30s')
+    })
+  })
+})
