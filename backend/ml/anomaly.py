@@ -27,6 +27,12 @@ try:
 except ImportError:
     _XGBOOST = False
 
+try:
+    import shap
+    _SHAP = True
+except ImportError:
+    _SHAP = False
+
 logger = logging.getLogger(__name__)
 
 MODELS_DIR = "models"
@@ -102,6 +108,9 @@ class SupervisedLogClassifier:
         self.test_metrics: dict = {}
         self.feature_names: list = []
         self.is_trained: bool = False
+        # Lazily-built SHAP TreeExplainer wrapping the trained Random Forest.
+        # Built on first call to .explain() so training cost is unaffected.
+        self._explainer = None
 
     # ----- training --------------------------------------------------------
 
@@ -155,6 +164,8 @@ class SupervisedLogClassifier:
             f"(CV F1 = {cv_results[self.best_model_name]['cv_f1_mean']:.4f})"
         )
         self.is_trained = True
+        # New RF -> invalidate cached SHAP explainer so it is rebuilt on demand.
+        self._explainer = None
         self._save()
         return cv_results
 
@@ -195,6 +206,115 @@ class SupervisedLogClassifier:
             "features":   [self.feature_names[i] for i in indices],
             "importance": [float(importances[i]) for i in indices],
         }
+
+    # ----- SHAP explainability (per-prediction) ----------------------------
+
+    def _ensure_explainer(self):
+        """Lazily build a SHAP TreeExplainer around the trained RF model."""
+        if self._explainer is not None:
+            return self._explainer
+        if not _SHAP:
+            return None
+        rf = self.classifiers.get("Random Forest")
+        if rf is None:
+            return None
+        try:
+            self._explainer = shap.TreeExplainer(rf)
+            return self._explainer
+        except Exception as exc:
+            logger.warning(f"Could not build SHAP TreeExplainer: {exc}")
+            return None
+
+    @staticmethod
+    def _normalise_shap_output(sv, n_features: int) -> np.ndarray:
+        """
+        SHAP returns different shapes depending on version / model:
+          * list[ndarray]            (legacy binary classifier)
+          * ndarray (n, f, n_classes)  (modern multi-output)
+          * ndarray (n, f)             (already collapsed)
+        We always extract class-1 ("anomaly") SHAP values for one sample.
+        """
+        if isinstance(sv, list):
+            arr = sv[1] if len(sv) > 1 else sv[0]
+            return np.asarray(arr[0])
+        sv = np.asarray(sv)
+        if sv.ndim == 3:
+            return sv[0, :, 1] if sv.shape[2] > 1 else sv[0, :, 0]
+        if sv.ndim == 2:
+            return sv[0]
+        # 1-D (single feature vector) — shouldn't happen but handle gracefully
+        return sv.reshape(-1)[:n_features]
+
+    def explain(self, log_text: str, top_k: int = 3) -> dict:
+        """
+        Compute the top-K features that drove a prediction, using SHAP values
+        from the trained Random Forest. Positive SHAP value -> push toward
+        anomaly; negative -> pull toward normal.
+
+        Returns:
+            {
+                "model": "Random Forest",
+                "base_value": float,           # explainer expected value (anomaly class)
+                "features": [
+                    {"feature": str, "shap_value": float,
+                     "direction": "anomaly" | "normal", "tfidf": float},
+                    ...
+                ],
+            }
+        Empty dict if SHAP is unavailable or the model isn't trained.
+        """
+        if not self.is_trained or not _SHAP:
+            return {}
+
+        explainer = self._ensure_explainer()
+        if explainer is None:
+            return {}
+
+        try:
+            x_sparse = self.vectorizer.transform([_tokenize(log_text)])
+            x_dense = x_sparse.toarray()
+            sv = explainer.shap_values(x_dense)
+            shap_vals = self._normalise_shap_output(sv, n_features=x_dense.shape[1])
+
+            # Base value (E[f(x)] for the anomaly class)
+            base = explainer.expected_value
+            if isinstance(base, (list, np.ndarray)):
+                base_arr = np.asarray(base).reshape(-1)
+                base_val = float(base_arr[1] if base_arr.size > 1 else base_arr[0])
+            else:
+                base_val = float(base)
+
+            # Restrict to features actually present in this log line so the
+            # explanation stays human-readable. If the log has fewer than
+            # top_k tokens we fall back to the global top-|shap| features.
+            tfidf_row = x_dense[0]
+            present_idx = np.where(tfidf_row > 0)[0]
+            candidates = present_idx if present_idx.size >= top_k else np.arange(len(shap_vals))
+
+            ranked = sorted(
+                candidates,
+                key=lambda i: abs(float(shap_vals[i])),
+                reverse=True,
+            )[:top_k]
+
+            features = []
+            for i in ranked:
+                sv_i = float(shap_vals[i])
+                features.append({
+                    "feature":    self.feature_names[i] if i < len(self.feature_names) else f"f{i}",
+                    "shap_value": sv_i,
+                    "direction":  "anomaly" if sv_i >= 0 else "normal",
+                    "tfidf":      float(tfidf_row[i]),
+                })
+
+            return {
+                "model":      "Random Forest",
+                "base_value": base_val,
+                "features":   features,
+            }
+        except Exception as exc:
+            logger.error(f"SHAP explain error: {exc}")
+            return {}
 
     # ----- predict (uses best model at inference time) ---------------------
 
@@ -247,6 +367,7 @@ class SupervisedLogClassifier:
             self.test_metrics    = data.get("test_metrics", {})
             self.feature_names   = data.get("feature_names", [])
             self.is_trained      = True
+            self._explainer      = None  # rebuild lazily on first explain() call
             logger.info(f"Loaded classifier (best = {self.best_model_name})")
             return True
         except FileNotFoundError:

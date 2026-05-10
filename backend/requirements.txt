@@ -11,6 +11,7 @@ python-dotenv==1.0.0
 requests==2.31.0
 xgboost>=2.0.0
 torch>=2.0.0
+shap>=0.45.0
 pytest==7.4.3
 pytest-asyncio==0.21.1
 httpx==0.25.2

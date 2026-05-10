@@ -444,3 +444,78 @@ class TestFeatureImportanceEndpoint:
         assert "importance" in fi
         assert isinstance(fi["features"], list)
         assert isinstance(fi["importance"], list)
+
+
+# ════════════════════════════════════════════════════════
+# GET /api/explain/{prediction_id}
+# ════════════════════════════════════════════════════════
+
+class TestExplainEndpoint:
+    """SHAP-based per-prediction explanation endpoint."""
+
+    def _seed_prediction(self, db_session, shap_payload=None):
+        pred = Prediction(
+            pipeline_id="pipe-explain",
+            log_snippet="ERROR: Database connection timeout",
+            is_anomaly=True,
+            anomaly_score=-0.7,
+            anomaly_confidence=0.92,
+            predicted_failures=2,
+            risk_level="HIGH",
+            risk_score=0.85,
+            recommendation="Check logs",
+            shap_explanation_json=shap_payload,
+        )
+        db_session.add(pred)
+        db_session.flush()
+        return pred
+
+    def test_unknown_prediction_returns_404(self, client):
+        response = client.get("/api/explain/999999")
+        assert response.status_code == 404
+
+    def test_stored_explanation_returned(self, client, db_session):
+        payload = {
+            "model": "Random Forest",
+            "base_value": 0.42,
+            "features": [
+                {"feature": "error",    "shap_value": 0.21, "direction": "anomaly", "tfidf": 0.4},
+                {"feature": "timeout",  "shap_value": 0.07, "direction": "anomaly", "tfidf": 0.3},
+                {"feature": "info",     "shap_value": -0.05,"direction": "normal",  "tfidf": 0.1},
+            ],
+        }
+        pred = self._seed_prediction(db_session, shap_payload=payload)
+
+        response = client.get(f"/api/explain/{pred.id}")
+        assert response.status_code == 200
+        body = response.json()
+
+        assert body["prediction_id"] == pred.id
+        assert body["pipeline_id"] == "pipe-explain"
+        assert body["risk_level"] == "HIGH"
+
+        exp = body["explanation"]
+        assert exp["model"] == "Random Forest"
+        assert isinstance(exp["features"], list)
+        assert len(exp["features"]) == 3
+        for feat in exp["features"]:
+            assert "feature" in feat
+            assert "shap_value" in feat
+            assert feat["direction"] in ("anomaly", "normal")
+
+    def test_missing_explanation_returns_friendly_message(self, client, db_session):
+        """
+        When a prediction has no stored SHAP payload AND the supervised model
+        isn't loaded, the endpoint should still return 200 with a helpful
+        message instead of crashing.
+        """
+        pred = self._seed_prediction(db_session, shap_payload=None)
+
+        response = client.get(f"/api/explain/{pred.id}")
+        assert response.status_code == 200
+        body = response.json()
+        assert "explanation" in body
+        assert isinstance(body["explanation"]["features"], list)
+        # Either back-filled (model loaded) or friendly fallback (model missing)
+        if not body["explanation"]["features"]:
+            assert "message" in body
