@@ -583,3 +583,241 @@ class TestLSTMLogDetectorPredict:
         det = LSTMLogDetector()
         result = det.predict(["just one line"])
         assert result["model"] == "lstm_disabled"
+
+
+# ════════════════════════════════════════════════════════
+# DrainLogParser — unit tests
+# ════════════════════════════════════════════════════════
+
+from ml.log_parser import (
+    DrainLogParser,
+    StructuredLogFeaturizer,
+    ParsedLog,
+    LOG_LEVELS,
+    LOG_LEVEL_SEVERITY,
+    WILDCARD,
+)
+
+
+class TestDrainParserParseLine:
+    """Behavioural tests for the Drain template miner."""
+
+    def setup_method(self):
+        self.parser = DrainLogParser()
+
+    def test_parse_returns_parsedlog_instance(self):
+        result = self.parser.parse_line("INFO [auth] Build started")
+        assert isinstance(result, ParsedLog)
+
+    def test_event_id_has_expected_prefix(self):
+        result = self.parser.parse_line("INFO [auth] Build started")
+        assert result.event_id.startswith("E")
+        assert len(result.event_id) == 6  # E + 5 digit cluster id
+
+    def test_log_level_extracted(self):
+        assert self.parser.parse_line("INFO message").log_level == "INFO"
+        assert self.parser.parse_line("WARNING busy").log_level == "WARNING"
+        assert self.parser.parse_line("ERROR boom").log_level == "ERROR"
+        assert self.parser.parse_line("FATAL crash").log_level == "FATAL"
+        assert self.parser.parse_line("CRITICAL down").log_level == "CRITICAL"
+
+    def test_log_level_unknown_when_missing(self):
+        assert self.parser.parse_line("just some text").log_level == "UNKNOWN"
+
+    def test_log_level_normalised_abbreviations(self):
+        assert self.parser.parse_line("WARN low memory").log_level == "WARNING"
+        assert self.parser.parse_line("ERR something").log_level == "ERROR"
+
+    def test_service_extracted_from_brackets(self):
+        result = self.parser.parse_line("INFO [auth-service] Build started")
+        assert result.service == "auth-service"
+
+    def test_service_none_when_missing(self):
+        result = self.parser.parse_line("INFO Build started")
+        assert result.service is None
+
+    def test_template_contains_wildcards_for_numbers(self):
+        result = self.parser.parse_line("ERROR Database timeout after 30s")
+        assert WILDCARD in result.template
+
+    def test_similar_lines_share_event_id(self):
+        a = self.parser.parse_line("ERROR [db] Database connection timeout after 30s")
+        b = self.parser.parse_line("ERROR [api] Database connection timeout after 60s")
+        assert a.event_id == b.event_id
+
+    def test_dissimilar_lines_get_different_event_ids(self):
+        a = self.parser.parse_line("ERROR [db] Database connection timeout")
+        b = self.parser.parse_line("INFO [auth] User logged in successfully")
+        assert a.event_id != b.event_id
+
+    def test_template_generalises_after_seeing_more_examples(self):
+        self.parser.parse_line("INFO [auth] Build started for branch main")
+        # second line with different last token should generalise the template
+        result = self.parser.parse_line("INFO [auth] Build started for branch develop")
+        assert WILDCARD in result.template
+        assert "started" in result.template  # invariant tokens preserved
+
+    def test_to_dict_returns_serialisable_payload(self):
+        result = self.parser.parse_line("ERROR [db] timeout 30s")
+        payload = result.to_dict()
+        for key in ("raw", "template", "event_id", "parameters", "log_level",
+                    "service", "timestamp", "timestamp_delta_sec"):
+            assert key in payload
+
+    def test_empty_line_does_not_crash(self):
+        result = self.parser.parse_line("")
+        assert isinstance(result, ParsedLog)
+
+
+class TestDrainParserBatch:
+
+    def setup_method(self):
+        self.parser = DrainLogParser()
+
+    def test_batch_returns_one_result_per_line(self):
+        lines = [
+            "INFO [auth] Build started",
+            "ERROR [db] Database timeout 30s",
+            "INFO [auth] Tests passed",
+        ]
+        results = self.parser.parse_batch(lines)
+        assert len(results) == 3
+
+    def test_batch_groups_repeated_lines_into_same_cluster(self):
+        lines = [f"INFO [svc-{i}] Service started on port {1000+i}"
+                 for i in range(20)]
+        results = self.parser.parse_batch(lines)
+        # Despite varying service + port, all should land in one cluster.
+        assert len({r.event_id for r in results}) == 1
+
+    def test_get_clusters_sorted_by_count_desc(self):
+        # 5 lines of one shape, 1 line of another → first cluster should be larger.
+        for _ in range(5):
+            self.parser.parse_line("INFO [auth] Health check OK")
+        self.parser.parse_line("ERROR [db] Disk full")
+        clusters = self.parser.get_clusters()
+        assert clusters[0]["count"] >= clusters[-1]["count"]
+
+    def test_clusters_contain_examples(self):
+        self.parser.parse_line("INFO [a] foo")
+        self.parser.parse_line("INFO [b] foo")
+        clusters = self.parser.get_clusters()
+        assert all("examples" in c and len(c["examples"]) > 0 for c in clusters)
+
+    def test_top_k_caps_clusters(self):
+        # Use structurally distinct lines so each lands in its own cluster.
+        unique_lines = [
+            "INFO [auth] Build started for branch main",
+            "WARNING [api] High memory usage detected",
+            "ERROR [db] Database connection timeout",
+            "FATAL [worker] Cannot connect to primary DB",
+            "CRITICAL [auth] OOM killer triggered container",
+            "INFO [scheduler] Job ran successfully today",
+            "DEBUG [cache] Cache key hit user data",
+        ]
+        for line in unique_lines:
+            self.parser.parse_line(line)
+        assert len(self.parser.get_clusters(top_k=5)) == 5
+        assert len(self.parser.get_clusters()) == len(unique_lines)
+
+
+class TestStructuredLogFeaturizer:
+
+    def setup_method(self):
+        # Mix of normal + error templates with a few services
+        self.lines = (
+            ["INFO [auth] Build started for branch main"]   * 10
+            + ["INFO [api] Tests passed"]                    * 10
+            + ["ERROR [db] Database timeout after 30s"]      * 10
+            + ["FATAL [worker] Cannot connect to primary DB"] * 10
+        )
+        self.feat = StructuredLogFeaturizer()
+
+    def test_fit_sets_is_fitted_flag(self):
+        self.feat.fit(self.lines)
+        assert self.feat.is_fitted is True
+
+    def test_transform_before_fit_raises(self):
+        with pytest.raises(RuntimeError):
+            self.feat.transform(["whatever"])
+
+    def test_fit_transform_returns_correct_shape(self):
+        X = self.feat.fit_transform(self.lines)
+        assert X.shape[0] == len(self.lines)
+        assert X.shape[1] == self.feat.n_features()
+
+    def test_features_are_sparse_csr(self):
+        X = self.feat.fit_transform(self.lines)
+        from scipy.sparse import csr_matrix
+        assert isinstance(X, csr_matrix)
+
+    def test_feature_names_match_n_features(self):
+        self.feat.fit(self.lines)
+        assert len(self.feat.feature_names) == self.feat.n_features()
+
+    def test_unseen_template_routed_to_other_bucket(self):
+        self.feat.fit(self.lines)
+        X1 = self.feat.transform(["INFO [auth] Build started for branch main"])
+        X2 = self.feat.transform(["NOVEL [unknown] Some completely new event pattern"])
+        # both must return sample-shaped vectors with stable feature dim
+        assert X1.shape[1] == X2.shape[1] == self.feat.n_features()
+
+    def test_log_level_severity_constants_complete(self):
+        # Every recognised level must have a severity score for the numeric feature.
+        for lvl in LOG_LEVELS:
+            assert lvl in LOG_LEVEL_SEVERITY
+
+
+class TestSupervisedLogClassifierWithDrain:
+    """Smoke tests for the hybrid TF-IDF + Drain feature pipeline."""
+
+    LOGS = (
+        ["INFO [auth] Build started for branch main"]   * 15
+        + ["INFO [api] Tests passed (100/100)"]         * 15
+        + ["INFO [worker] Service started on port 8080"]* 15
+        + ["ERROR [db] Database connection timeout after 30s"] * 15
+        + ["FATAL [worker] Cannot connect to primary DB"]      * 15
+        + ["CRITICAL [auth] OOM killer triggered"]             * 15
+    )
+    LABELS = [0] * 45 + [1] * 45
+
+    def test_drain_classifier_trains(self):
+        clf = LogAnomalyDetector(use_drain_features=True)
+        cv = clf.train(self.LOGS, self.LABELS)
+        assert isinstance(cv, dict) and len(cv) > 0
+        assert clf.is_trained
+        assert clf.structured_featurizer is not None
+        assert clf.structured_featurizer.is_fitted
+
+    def test_drain_classifier_predict_reflects_drain_in_reason(self):
+        clf = LogAnomalyDetector(use_drain_features=True)
+        clf.train(self.LOGS, self.LABELS)
+        result = clf.predict("ERROR [db] Database connection timeout after 99s")
+        assert "Drain" in result["reason"]
+        assert result["is_anomaly"] is True
+
+    def test_legacy_tfidf_only_classifier_still_works(self):
+        clf = LogAnomalyDetector(use_drain_features=False)
+        cv = clf.train(self.LOGS, self.LABELS)
+        assert clf.is_trained
+        assert clf.structured_featurizer is None
+        result = clf.predict("ERROR [db] Database connection timeout")
+        assert "TF-IDF" in result["reason"]
+
+    def test_parse_log_exposes_template_metadata(self):
+        clf = LogAnomalyDetector(use_drain_features=True)
+        clf.train(self.LOGS, self.LABELS)
+        parsed = clf.parse_log("ERROR [db] Database connection timeout after 5s")
+        assert parsed is not None
+        assert parsed.log_level == "ERROR"
+        assert parsed.service == "db"
+        assert WILDCARD in parsed.template
+
+    def test_get_log_templates_returns_clusters(self):
+        clf = LogAnomalyDetector(use_drain_features=True)
+        clf.train(self.LOGS, self.LABELS)
+        clusters = clf.get_log_templates(top_k=10)
+        assert isinstance(clusters, list)
+        assert len(clusters) > 0
+        for c in clusters:
+            assert "event_id" in c and "template" in c and "count" in c

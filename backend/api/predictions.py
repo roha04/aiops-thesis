@@ -1,12 +1,14 @@
-"""Predictions, Dashboard, Explain & Training Endpoints"""
+"""Predictions, Dashboard, Explain, Log-Parse & Training Endpoints"""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
+from typing import Optional
 import logging
 
 from db.config import get_db
 from db.models import Prediction, Alert, TrainingData, ModelMetrics
+from ml.log_parser import DrainLogParser
 from ml.pipeline import AIOpsPredictor
 
 logger = logging.getLogger(__name__)
@@ -31,7 +33,7 @@ def predict_pipeline(
     """Predict if pipeline will fail"""
     try:
         logger.info(f"🔮 Predicting for pipeline: {pipeline_id}")
-        
+
         if not logs:
             logs = f"Build log from {pipeline_id}"
 
@@ -235,6 +237,65 @@ def explain_prediction(prediction_id: int, db: Session = Depends(get_db)):
     except Exception as exc:
         logger.error(f"❌ Explain error: {exc}")
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ==================== LOG PARSING (DRAIN) ====================
+
+@router.post("/parse-logs")
+def parse_logs(
+    payload: dict = Body(
+        ...,
+        example={"logs": "INFO [auth] Build started\nERROR [db] Timeout 30s"},
+    ),
+):
+    """
+    Parse one or more log lines through the Drain template miner.
+
+    Body
+    ----
+    ``{"logs": "<single log line OR newline-separated batch>"}``
+
+    Returns
+    -------
+    ``{"parsed": [<ParsedLog>, ...], "summary": {"n_lines": int,
+        "n_unique_templates": int, "templates": [...]} }``
+
+    The parser uses the model's *live* Drain instance when the supervised
+    classifier is loaded so the discovered templates stay consistent with
+    those used at training time. Otherwise a fresh ad-hoc parser is built.
+    """
+    raw_logs: Optional[str] = (payload or {}).get("logs")
+    if not raw_logs or not isinstance(raw_logs, str):
+        raise HTTPException(
+            status_code=400, detail="Body must include a non-empty 'logs' string."
+        )
+
+    lines = [ln for ln in raw_logs.splitlines() if ln.strip()]
+    if not lines:
+        lines = [raw_logs.strip()]
+
+    featurizer = (
+        predictor.anomaly_detector.structured_featurizer
+        if predictor.anomaly_detector.is_trained
+        else None
+    )
+    if featurizer is not None and featurizer.parser is not None:
+        # Use the trained Drain instance so template ids match the model's view.
+        parser = featurizer.parser
+    else:
+        parser = DrainLogParser()
+
+    parsed = parser.parse_batch(lines)
+    seen_ids = {p.event_id for p in parsed}
+
+    return {
+        "parsed":  [p.to_dict() for p in parsed],
+        "summary": {
+            "n_lines":            len(parsed),
+            "n_unique_templates": len(seen_ids),
+            "templates":          parser.get_clusters(top_k=10),
+        },
+    }
 
 
 # ==================== TRAINING ====================

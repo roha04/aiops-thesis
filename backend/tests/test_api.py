@@ -519,3 +519,112 @@ class TestExplainEndpoint:
         # Either back-filled (model loaded) or friendly fallback (model missing)
         if not body["explanation"]["features"]:
             assert "message" in body
+
+
+# ════════════════════════════════════════════════════════
+# POST /api/parse-logs (Drain template miner)
+# ════════════════════════════════════════════════════════
+
+class TestParseLogsEndpoint:
+    """Drain-based log parsing endpoint."""
+
+    def test_returns_200_for_single_line(self, client):
+        response = client.post(
+            "/api/parse-logs",
+            json={"logs": "INFO [auth-service] Build started for branch main"},
+        )
+        assert response.status_code == 200
+
+    def test_response_has_required_keys(self, client):
+        response = client.post(
+            "/api/parse-logs",
+            json={"logs": "ERROR [db] timeout after 30s"},
+        )
+        body = response.json()
+        assert "parsed" in body
+        assert "summary" in body
+        for key in ("n_lines", "n_unique_templates", "templates"):
+            assert key in body["summary"]
+
+    def test_each_parsed_entry_has_structured_fields(self, client):
+        response = client.post(
+            "/api/parse-logs",
+            json={"logs": "ERROR [db-worker] Database connection timeout after 30s"},
+        )
+        parsed = response.json()["parsed"]
+        assert len(parsed) == 1
+        item = parsed[0]
+        for key in ("raw", "template", "event_id", "parameters",
+                    "log_level", "service", "timestamp", "timestamp_delta_sec"):
+            assert key in item
+
+    def test_extracts_correct_log_level_and_service(self, client):
+        response = client.post(
+            "/api/parse-logs",
+            json={"logs": "ERROR [db-worker] Database connection timeout after 30s"},
+        )
+        item = response.json()["parsed"][0]
+        assert item["log_level"] == "ERROR"
+        assert item["service"] == "db-worker"
+
+    def test_template_contains_wildcard_for_numeric_value(self, client):
+        response = client.post(
+            "/api/parse-logs",
+            json={"logs": "ERROR Database timeout after 30s"},
+        )
+        item = response.json()["parsed"][0]
+        assert "<*>" in item["template"]
+
+    def test_multiline_input_split_per_line(self, client):
+        body_text = (
+            "INFO [auth] Build started for branch main\n"
+            "ERROR [db] Database timeout after 30s\n"
+            "INFO [auth] Tests passed (142/142)"
+        )
+        response = client.post("/api/parse-logs", json={"logs": body_text})
+        body = response.json()
+        assert body["summary"]["n_lines"] == 3
+        assert len(body["parsed"]) == 3
+
+    def test_similar_lines_share_event_id(self, client):
+        body_text = (
+            "ERROR [db] Database connection timeout after 30s\n"
+            "ERROR [api] Database connection timeout after 60s"
+        )
+        response = client.post("/api/parse-logs", json={"logs": body_text})
+        parsed = response.json()["parsed"]
+        assert parsed[0]["event_id"] == parsed[1]["event_id"]
+        # Same template family => 1 unique template across the batch.
+        assert response.json()["summary"]["n_unique_templates"] == 1
+
+    def test_empty_body_returns_400(self, client):
+        response = client.post("/api/parse-logs", json={"logs": ""})
+        assert response.status_code == 400
+
+    def test_missing_logs_key_returns_400(self, client):
+        response = client.post("/api/parse-logs", json={})
+        assert response.status_code == 400
+
+
+# ════════════════════════════════════════════════════════
+# GET /api/analytics/log-templates
+# ════════════════════════════════════════════════════════
+
+class TestLogTemplatesEndpoint:
+
+    def test_returns_200(self, client):
+        assert client.get("/api/analytics/log-templates").status_code == 200
+
+    def test_returns_required_keys(self, client):
+        body = client.get("/api/analytics/log-templates").json()
+        assert "templates" in body
+        assert "n_clusters" in body
+
+    def test_templates_is_list(self, client):
+        body = client.get("/api/analytics/log-templates").json()
+        assert isinstance(body["templates"], list)
+
+    def test_top_k_query_param_accepted(self, client):
+        # Endpoint must accept the query param without error
+        response = client.get("/api/analytics/log-templates?top_k=5")
+        assert response.status_code == 200

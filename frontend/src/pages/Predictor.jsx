@@ -60,6 +60,19 @@ export default function Predictor() {
     tfidf:      Number(f.tfidf ?? 0),
   }))
 
+  // Drain-parsed structured metadata.
+  // Comes from /api/predict in `result.prediction.parsed_log`.
+  const parsedLog = result?.prediction?.parsed_log
+
+  const levelColor = (lvl) => {
+    if (!lvl) return 'bg-gray-700 text-gray-200'
+    if (lvl === 'ERROR' || lvl === 'FATAL' || lvl === 'CRITICAL') return 'bg-red-900 text-red-200'
+    if (lvl === 'WARNING') return 'bg-yellow-900 text-yellow-200'
+    if (lvl === 'INFO')    return 'bg-blue-900 text-blue-200'
+    if (lvl === 'DEBUG')   return 'bg-gray-700 text-gray-300'
+    return 'bg-gray-700 text-gray-200'
+  }
+
   return (
     <div className="space-y-6 max-w-2xl">
       <h1 className="text-3xl font-bold">🔮 Predictor</h1>
@@ -135,6 +148,83 @@ export default function Predictor() {
             Prediction ID: {result.prediction_id} | 
             Time: {new Date(result.timestamp).toLocaleTimeString()}
           </div>
+        </div>
+      )}
+
+      {result && parsedLog && (
+        <div
+          data-testid="parsed-log-card"
+          className="bg-gray-800 p-6 rounded border border-gray-700"
+        >
+          <h2 className="text-xl font-bold mb-1">🧩 Parsed Log (Drain)</h2>
+          <p className="text-sm text-gray-400 mb-4">
+            Structured features extracted by the Drain template miner — fed
+            directly into the classifier alongside TF-IDF.
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div>
+              <p className="text-gray-400 text-xs uppercase tracking-wider mb-1">
+                Event Template
+              </p>
+              <code
+                data-testid="parsed-template"
+                className="block bg-gray-900 text-gray-100 px-3 py-2 rounded font-mono text-xs break-all"
+              >
+                {parsedLog.template || '—'}
+              </code>
+              <p className="text-gray-500 text-xs mt-1">
+                ID:{' '}
+                <span data-testid="parsed-event-id" className="text-gray-300">
+                  {parsedLog.event_id}
+                </span>
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs uppercase text-gray-400 w-20">Level</span>
+                <span
+                  data-testid="parsed-level"
+                  className={`px-2 py-0.5 rounded text-xs font-semibold ${levelColor(parsedLog.log_level)}`}
+                >
+                  {parsedLog.log_level}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs uppercase text-gray-400 w-20">Service</span>
+                <span data-testid="parsed-service" className="text-gray-200 font-mono text-xs">
+                  {parsedLog.service || <em className="text-gray-500">none</em>}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs uppercase text-gray-400 w-20">Δ time</span>
+                <span className="text-gray-200 font-mono text-xs">
+                  {parsedLog.timestamp_delta_sec != null
+                    ? `${parsedLog.timestamp_delta_sec.toFixed(2)} s`
+                    : <em className="text-gray-500">n/a</em>}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {Array.isArray(parsedLog.parameters) && parsedLog.parameters.length > 0 && (
+            <div className="mt-4">
+              <p className="text-gray-400 text-xs uppercase tracking-wider mb-2">
+                Extracted parameters
+              </p>
+              <div data-testid="parsed-parameters" className="flex flex-wrap gap-2">
+                {parsedLog.parameters.map((p, i) => (
+                  <code
+                    key={`param-${i}`}
+                    className="px-2 py-1 bg-gray-900 text-amber-300 rounded text-xs font-mono"
+                  >
+                    {p}
+                  </code>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
