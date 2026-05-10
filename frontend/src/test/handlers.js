@@ -81,11 +81,28 @@ export const PREDICTION_RESULT = {
     risk_level: 'HIGH',
     score: 0.82,
     recommendation: '🔴 CRITICAL: Anomaly detected. Check logs immediately!',
+    shap_explanation: {
+      model: 'Random Forest',
+      base_value: 0.5,
+      features: [
+        { feature: 'error',      shap_value:  0.18, direction: 'anomaly', tfidf: 0.42 },
+        { feature: 'connection', shap_value:  0.09, direction: 'anomaly', tfidf: 0.31 },
+        { feature: 'info',       shap_value: -0.04, direction: 'normal',  tfidf: 0.10 },
+      ],
+    },
     details: {
       log_anomaly: { is_anomaly: true, anomaly_score: -0.8, confidence: 0.9 },
       failure_forecast: { predicted_failures: 3, upper_bound: 5, lower_bound: 1, error: null },
     },
   },
+}
+
+export const EXPLAIN_RESULT = {
+  prediction_id: 42,
+  pipeline_id: 'jenkins-build-123',
+  is_anomaly: true,
+  risk_level: 'HIGH',
+  explanation: PREDICTION_RESULT.prediction.shap_explanation,
 }
 
 export const ANALYTICS_SUMMARY = {
@@ -132,6 +149,10 @@ export const handlers = [
 
   http.post(`${BASE}/api/predict`, () =>
     HttpResponse.json(PREDICTION_RESULT)
+  ),
+
+  http.get(`${BASE}/api/explain/:id`, () =>
+    HttpResponse.json(EXPLAIN_RESULT)
   ),
 
   http.get(`${BASE}/api/analytics/summary`, () =>

@@ -1,5 +1,16 @@
 import { useState } from 'react'
 import axios from 'axios'
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Cell,
+  Tooltip,
+  CartesianGrid,
+  ReferenceLine,
+} from 'recharts'
 
 const API = axios.create({ baseURL: 'http://localhost:8000' })
 
@@ -37,6 +48,17 @@ export default function Predictor() {
     if (level === 'MEDIUM') return '⚠️'
     return '✅'
   }
+
+  // SHAP explanation comes from /api/predict in `result.prediction.shap_explanation`.
+  // Each entry: { feature, shap_value, direction: 'anomaly'|'normal', tfidf }
+  const shap = result?.prediction?.shap_explanation
+  const shapFeatures = Array.isArray(shap?.features) ? shap.features : []
+  const shapChartData = shapFeatures.map((f) => ({
+    feature:    f.feature,
+    shap_value: Number(f.shap_value),
+    direction:  f.direction,
+    tfidf:      Number(f.tfidf ?? 0),
+  }))
 
   return (
     <div className="space-y-6 max-w-2xl">
@@ -113,6 +135,72 @@ export default function Predictor() {
             Prediction ID: {result.prediction_id} | 
             Time: {new Date(result.timestamp).toLocaleTimeString()}
           </div>
+        </div>
+      )}
+
+      {result && (
+        <div className="bg-gray-800 p-6 rounded border border-gray-700">
+          <h2 className="text-xl font-bold mb-1">🔍 Why this prediction?</h2>
+          <p className="text-sm text-gray-400 mb-4">
+            Top contributing features from the Random Forest model
+            <span className="text-red-400"> — red bars push toward anomaly</span>,
+            <span className="text-green-400"> green bars pull toward normal</span>.
+          </p>
+
+          {shapChartData.length > 0 ? (
+            <>
+              <ResponsiveContainer width="100%" height={Math.max(180, 60 * shapChartData.length)}>
+                <BarChart
+                  data={shapChartData}
+                  layout="vertical"
+                  margin={{ top: 8, right: 24, left: 24, bottom: 8 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                  <XAxis type="number" stroke="#aaa" tick={{ fontSize: 11 }} />
+                  <YAxis
+                    type="category"
+                    dataKey="feature"
+                    stroke="#ddd"
+                    tick={{ fontSize: 12 }}
+                    width={120}
+                  />
+                  <ReferenceLine x={0} stroke="#666" />
+                  <Tooltip
+                    contentStyle={{ background: '#111827', border: '1px solid #374151' }}
+                    formatter={(v, _name, p) => [
+                      `${Number(v).toFixed(4)}  (${p.payload.direction})`,
+                      'SHAP value',
+                    ]}
+                    labelStyle={{ color: '#e5e7eb' }}
+                  />
+                  <Bar dataKey="shap_value">
+                    {shapChartData.map((entry, idx) => (
+                      <Cell
+                        key={`shap-cell-${idx}`}
+                        fill={entry.direction === 'anomaly' ? '#ef4444' : '#10b981'}
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+
+              {typeof shap?.base_value === 'number' && (
+                <p className="mt-3 text-xs text-gray-500">
+                  Model: <span className="text-gray-300">{shap.model || 'Random Forest'}</span>
+                  {' · '}
+                  Base anomaly probability:&nbsp;
+                  <span className="text-gray-300">
+                    {(shap.base_value * 100).toFixed(1)}%
+                  </span>
+                </p>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-gray-500">
+              No SHAP explanation available — train the supervised model first
+              (POST <code className="text-gray-300">/api/train</code>).
+            </p>
+          )}
         </div>
       )}
 

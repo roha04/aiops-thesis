@@ -1,18 +1,24 @@
-"""Predictions, Dashboard & Training Endpoints"""
+"""Predictions, Dashboard, Explain & Training Endpoints"""
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 import logging
 
-from db.config import get_db  # ✨ Changed
-from db.models import Prediction, Alert, TrainingData, ModelMetrics  # ✨ Changed
-from ml.pipeline import AIOpsPredictor  # ✨ Changed
+from db.config import get_db
+from db.models import Prediction, Alert, TrainingData, ModelMetrics
+from ml.pipeline import AIOpsPredictor
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["predictions"])
 
 predictor = AIOpsPredictor()
+# Try to hot-load the supervised classifier so SHAP explanations work for
+# the very first prediction after a server restart (no /api/train required).
+try:
+    predictor.anomaly_detector.load_model()
+except Exception as _exc:
+    logger.debug(f"Predictor model not preloaded: {_exc}")
 
 # ==================== PREDICT ====================
 
@@ -36,6 +42,9 @@ def predict_pipeline(
 
         result = predictor.analyze(logs, failure_history)
 
+        # SHAP explanation may be empty if the supervised RF isn't trained yet.
+        shap_payload = result.get("shap_explanation") or None
+
         prediction = Prediction(
             pipeline_id=pipeline_id,
             log_snippet=logs[:500],
@@ -47,7 +56,8 @@ def predict_pipeline(
             failure_lower_bound=None,
             risk_level=result["risk_level"],
             risk_score=result["score"],
-            recommendation=result["recommendation"]
+            recommendation=result["recommendation"],
+            shap_explanation_json=shap_payload,
         )
         db.add(prediction)
 
@@ -162,6 +172,69 @@ def dashboard_stats(db: Session = Depends(get_db)):
     except Exception as e:
         logger.error(f"❌ Dashboard error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== EXPLAIN (SHAP) ====================
+
+@router.get("/explain/{prediction_id}")
+def explain_prediction(prediction_id: int, db: Session = Depends(get_db)):
+    """
+    Return SHAP-based explanation for a stored prediction.
+
+    Looks up the saved Prediction row and returns the top contributing features
+    (positive SHAP values push the model toward "anomaly", negative values pull
+    it toward "normal"). If the explanation wasn't persisted at prediction time
+    (e.g. the prediction was made before the supervised model was trained), we
+    recompute it on the fly from the stored log snippet and back-fill the row
+    so subsequent calls are O(1).
+    """
+    try:
+        pred = db.query(Prediction).filter(Prediction.id == prediction_id).first()
+        if pred is None:
+            raise HTTPException(status_code=404, detail=f"Prediction {prediction_id} not found")
+
+        explanation = pred.shap_explanation_json
+
+        # Lazy back-fill: recompute if missing and persist for next time.
+        if not explanation and pred.log_snippet:
+            try:
+                explanation = predictor.anomaly_detector.explain(pred.log_snippet, top_k=3)
+            except Exception as exc:
+                logger.warning(f"On-demand SHAP recompute failed: {exc}")
+                explanation = {}
+
+            if explanation and explanation.get("features"):
+                pred.shap_explanation_json = explanation
+                db.commit()
+
+        if not explanation or not explanation.get("features"):
+            return {
+                "prediction_id": prediction_id,
+                "pipeline_id":   pred.pipeline_id,
+                "explanation": {
+                    "model":      None,
+                    "base_value": None,
+                    "features":   [],
+                },
+                "message": (
+                    "No SHAP explanation available. Train the supervised model "
+                    "via POST /api/train to enable explainability."
+                ),
+            }
+
+        return {
+            "prediction_id": prediction_id,
+            "pipeline_id":   pred.pipeline_id,
+            "is_anomaly":    bool(pred.is_anomaly),
+            "risk_level":    pred.risk_level,
+            "explanation":   explanation,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"❌ Explain error: {exc}")
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 # ==================== TRAINING ====================

@@ -44,7 +44,11 @@ class Prediction(Base):
     risk_level = Column(String)  # LOW, MEDIUM, HIGH
     risk_score = Column(Float)
     recommendation = Column(Text)
-    
+
+    # SHAP explainability — top contributing features for this prediction
+    # (populated when the supervised RF model is available; otherwise NULL).
+    shap_explanation_json = Column(JSON, nullable=True)
+
     # Metadata
     created_at = Column(DateTime, default=datetime.now, index=True)
     

@@ -28,6 +28,35 @@ logger = logging.getLogger(__name__)
 # Initialize database
 Base.metadata.create_all(bind=engine)
 
+
+def _ensure_shap_column():
+    """
+    Idempotent micro-migration: SQLAlchemy ``create_all`` does NOT add new
+    columns to pre-existing tables. The SHAP feature introduces a new
+    ``shap_explanation_json`` column on the predictions table; back-fill it
+    on existing databases so inserts don't break.
+    """
+    from sqlalchemy import text, inspect
+    try:
+        inspector = inspect(engine)
+        cols = {c["name"] for c in inspector.get_columns("predictions")}
+        if "shap_explanation_json" in cols:
+            return
+
+        dialect = engine.dialect.name
+        if dialect == "postgresql":
+            ddl = "ALTER TABLE predictions ADD COLUMN IF NOT EXISTS shap_explanation_json JSONB"
+        else:
+            ddl = "ALTER TABLE predictions ADD COLUMN shap_explanation_json TEXT"
+        with engine.begin() as conn:
+            conn.execute(text(ddl))
+        logger.info("Added shap_explanation_json column to predictions table.")
+    except Exception as exc:
+        logger.warning(f"Could not auto-migrate shap column: {exc}")
+
+
+_ensure_shap_column()
+
 # Initialize ML predictor
 predictor = AIOpsPredictor()
 
