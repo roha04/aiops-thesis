@@ -5,11 +5,11 @@ export default function Layout({ children, page, setPage, backendOnline }) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
 
   const menuItems = [
-  { id: 'dashboard', label: '📊 Dashboard', icon: '📊' },
-  { id: 'predictor', label: '🔮 Predictor', icon: '🔮' },
-  { id: 'analytics', label: '📈 Analytics', icon: '📈' },
-  { id: 'analytics-history', label: '📚 History', icon: '📚' },
-  { id: 'alerts', label: '🚨 Alerts', icon: '🚨' },
+  { id: 'dashboard', label: '📊 Панель', icon: '📊' },
+  { id: 'predictor', label: '🔮 Прогноз', icon: '🔮' },
+  { id: 'analytics', label: '📈 Аналітика', icon: '📈' },
+  { id: 'analytics-history', label: '📚 Історія', icon: '📚' },
+  { id: 'alerts', label: '🚨 Сповіщення', icon: '🚨' },
   { id: 'jenkins', label: '🔧 Jenkins', icon: '🔧' },
 ]
 
@@ -43,7 +43,7 @@ export default function Layout({ children, page, setPage, backendOnline }) {
         <div className="p-4 border-t border-gray-700">
           <div className="flex items-center gap-2">
             <Activity size={16} className={`${backendOnline ? 'text-green-500' : 'text-red-500'} animate-pulse`} />
-            {sidebarOpen && <span className="text-sm">{backendOnline ? 'Online' : 'Offline'}</span>}
+            {sidebarOpen && <span className="text-sm">{backendOnline ? 'Онлайн' : 'Офлайн'}</span>}
           </div>
         </div>
       </div>
@@ -51,10 +51,10 @@ export default function Layout({ children, page, setPage, backendOnline }) {
       {/* Main */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="bg-gray-800 border-b border-gray-700 p-4 flex justify-between items-center">
-          <h1 className="text-2xl font-bold">AIOps Platform</h1>
+          <h1 className="text-2xl font-bold">Платформа AIOps</h1>
           <div className={`px-3 py-1 rounded-full text-sm flex items-center gap-2 ${backendOnline ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'}`}>
             <span className={`w-2 h-2 rounded-full animate-pulse ${backendOnline ? 'bg-green-500' : 'bg-red-500'}`}></span>
-            Backend {backendOnline ? 'Online' : 'Offline'}
+            Бекенд {backendOnline ? 'онлайн' : 'офлайн'}
           </div>
         </header>
 

@@ -14,6 +14,13 @@ import {
 
 const API = axios.create({ baseURL: 'http://localhost:8000' })
 
+// Map English risk-level enum values from the backend to Ukrainian labels.
+const RISK_LABEL = {
+  HIGH:   'ВИСОКИЙ РИЗИК',
+  MEDIUM: 'СЕРЕДНІЙ РИЗИК',
+  LOW:    'НИЗЬКИЙ РИЗИК',
+}
+
 export default function Predictor() {
   const [pipelineId, setPipelineId] = useState('jenkins-build-123')
   const [logs, setLogs] = useState('ERROR: Database connection timeout')
@@ -75,26 +82,26 @@ export default function Predictor() {
 
   return (
     <div className="space-y-6 max-w-2xl">
-      <h1 className="text-3xl font-bold">🔮 Predictor</h1>
+      <h1 className="text-3xl font-bold">🔮 Прогноз</h1>
 
       <div className="bg-gray-800 p-6 rounded border border-gray-700 space-y-4">
         <div>
-          <label className="block text-sm font-medium mb-2">Pipeline ID</label>
+          <label className="block text-sm font-medium mb-2">ID пайплайну</label>
           <input
             type="text"
             value={pipelineId}
             onChange={(e) => setPipelineId(e.target.value)}
-            placeholder="e.g., jenkins-build-123"
+            placeholder="напр., jenkins-build-123"
             className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-2">Logs Sample</label>
+          <label className="block text-sm font-medium mb-2">Зразок логів</label>
           <textarea
             value={logs}
             onChange={(e) => setLogs(e.target.value)}
-            placeholder="Paste log output here..."
+            placeholder="Вставте логи сюди..."
             rows="6"
             className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 font-mono text-sm"
           />
@@ -105,13 +112,13 @@ export default function Predictor() {
           disabled={loading || !pipelineId || !logs}
           className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 px-4 py-3 rounded font-semibold text-lg transition-colors"
         >
-          {loading ? '⏳ Analyzing...' : '🚀 Predict'}
+          {loading ? '⏳ Аналіз...' : '🚀 Прогнозувати'}
         </button>
       </div>
 
       {error && (
         <div className="bg-red-900/30 border border-red-700 p-4 rounded">
-          <p className="text-red-300">❌ Error: {error}</p>
+          <p className="text-red-300">❌ Помилка: {error}</p>
         </div>
       )}
 
@@ -119,34 +126,36 @@ export default function Predictor() {
         <div className={`${getRiskColor(result.prediction.risk_level)} p-6 rounded border-2 border-current`}>
           <div className="flex items-center gap-3 mb-4">
             <span className="text-4xl">{getRiskIcon(result.prediction.risk_level)}</span>
-            <h2 className="text-3xl font-bold">{result.prediction.risk_level} RISK</h2>
+            <h2 className="text-3xl font-bold">
+              {RISK_LABEL[result.prediction.risk_level] || result.prediction.risk_level}
+            </h2>
           </div>
 
           <div className="space-y-3">
             <div className="flex justify-between">
-              <span>Risk Score:</span>
+              <span>Бал ризику:</span>
               <span className="font-bold">{(result.prediction.score * 100).toFixed(1)}%</span>
             </div>
 
             <div className="flex justify-between">
-              <span>Anomaly Detected:</span>
-              <span className="font-bold">{result.prediction.details.log_anomaly.is_anomaly ? 'YES ⚠️' : 'NO ✅'}</span>
+              <span>Виявлено аномалію:</span>
+              <span className="font-bold">{result.prediction.details.log_anomaly.is_anomaly ? 'ТАК ⚠️' : 'НІ ✅'}</span>
             </div>
 
             <div className="flex justify-between">
-              <span>Confidence:</span>
+              <span>Впевненість:</span>
               <span className="font-bold">{(result.prediction.details.log_anomaly.confidence * 100).toFixed(1)}%</span>
             </div>
 
             <div className="border-t border-current opacity-50 pt-3 mt-3">
-              <p className="text-sm font-semibold mb-2">Recommendation:</p>
+              <p className="text-sm font-semibold mb-2">Рекомендація:</p>
               <p className="text-sm">{result.prediction.recommendation}</p>
             </div>
           </div>
 
           <div className="mt-4 text-xs opacity-75">
-            Prediction ID: {result.prediction_id} | 
-            Time: {new Date(result.timestamp).toLocaleTimeString()}
+            ID прогнозу: {result.prediction_id} | 
+            Час: {new Date(result.timestamp).toLocaleTimeString()}
           </div>
         </div>
       )}
@@ -156,16 +165,16 @@ export default function Predictor() {
           data-testid="parsed-log-card"
           className="bg-gray-800 p-6 rounded border border-gray-700"
         >
-          <h2 className="text-xl font-bold mb-1">🧩 Parsed Log (Drain)</h2>
+          <h2 className="text-xl font-bold mb-1">🧩 Розібраний лог (Drain)</h2>
           <p className="text-sm text-gray-400 mb-4">
-            Structured features extracted by the Drain template miner — fed
-            directly into the classifier alongside TF-IDF.
+            Структурні ознаки, видобуті алгоритмом Drain — подаються до
+            класифікатора разом із TF-IDF.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
             <div>
               <p className="text-gray-400 text-xs uppercase tracking-wider mb-1">
-                Event Template
+                Шаблон події
               </p>
               <code
                 data-testid="parsed-template"
@@ -183,7 +192,7 @@ export default function Predictor() {
 
             <div className="space-y-3">
               <div className="flex items-center gap-2">
-                <span className="text-xs uppercase text-gray-400 w-20">Level</span>
+                <span className="text-xs uppercase text-gray-400 w-20">Рівень</span>
                 <span
                   data-testid="parsed-level"
                   className={`px-2 py-0.5 rounded text-xs font-semibold ${levelColor(parsedLog.log_level)}`}
@@ -192,17 +201,17 @@ export default function Predictor() {
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-xs uppercase text-gray-400 w-20">Service</span>
+                <span className="text-xs uppercase text-gray-400 w-20">Сервіс</span>
                 <span data-testid="parsed-service" className="text-gray-200 font-mono text-xs">
-                  {parsedLog.service || <em className="text-gray-500">none</em>}
+                  {parsedLog.service || <em className="text-gray-500">немає</em>}
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-xs uppercase text-gray-400 w-20">Δ time</span>
+                <span className="text-xs uppercase text-gray-400 w-20">Δ часу</span>
                 <span className="text-gray-200 font-mono text-xs">
                   {parsedLog.timestamp_delta_sec != null
-                    ? `${parsedLog.timestamp_delta_sec.toFixed(2)} s`
-                    : <em className="text-gray-500">n/a</em>}
+                    ? `${parsedLog.timestamp_delta_sec.toFixed(2)} с`
+                    : <em className="text-gray-500">—</em>}
                 </span>
               </div>
             </div>
@@ -211,7 +220,7 @@ export default function Predictor() {
           {Array.isArray(parsedLog.parameters) && parsedLog.parameters.length > 0 && (
             <div className="mt-4">
               <p className="text-gray-400 text-xs uppercase tracking-wider mb-2">
-                Extracted parameters
+                Видобуті параметри
               </p>
               <div data-testid="parsed-parameters" className="flex flex-wrap gap-2">
                 {parsedLog.parameters.map((p, i) => (
@@ -230,11 +239,11 @@ export default function Predictor() {
 
       {result && (
         <div className="bg-gray-800 p-6 rounded border border-gray-700">
-          <h2 className="text-xl font-bold mb-1">🔍 Why this prediction?</h2>
+          <h2 className="text-xl font-bold mb-1">🔍 Чому таке передбачення?</h2>
           <p className="text-sm text-gray-400 mb-4">
-            Top contributing features from the Random Forest model
-            <span className="text-red-400"> — red bars push toward anomaly</span>,
-            <span className="text-green-400"> green bars pull toward normal</span>.
+            Найвпливовіші ознаки моделі Random Forest
+            <span className="text-red-400"> — червоні стовпці зміщують у бік аномалії</span>,
+            <span className="text-green-400"> зелені — у бік норми</span>.
           </p>
 
           {shapChartData.length > 0 ? (
@@ -258,8 +267,8 @@ export default function Predictor() {
                   <Tooltip
                     contentStyle={{ background: '#111827', border: '1px solid #374151' }}
                     formatter={(v, _name, p) => [
-                      `${Number(v).toFixed(4)}  (${p.payload.direction})`,
-                      'SHAP value',
+                      `${Number(v).toFixed(4)}  (${p.payload.direction === 'anomaly' ? 'аномалія' : 'норма'})`,
+                      'SHAP-значення',
                     ]}
                     labelStyle={{ color: '#e5e7eb' }}
                   />
@@ -276,9 +285,9 @@ export default function Predictor() {
 
               {typeof shap?.base_value === 'number' && (
                 <p className="mt-3 text-xs text-gray-500">
-                  Model: <span className="text-gray-300">{shap.model || 'Random Forest'}</span>
+                  Модель: <span className="text-gray-300">{shap.model || 'Random Forest'}</span>
                   {' · '}
-                  Base anomaly probability:&nbsp;
+                  Базова ймовірність аномалії:&nbsp;
                   <span className="text-gray-300">
                     {(shap.base_value * 100).toFixed(1)}%
                   </span>
@@ -287,7 +296,7 @@ export default function Predictor() {
             </>
           ) : (
             <p className="text-sm text-gray-500">
-              No SHAP explanation available — train the supervised model first
+              SHAP-пояснення недоступне — спочатку навчіть модель
               (POST <code className="text-gray-300">/api/train</code>).
             </p>
           )}
@@ -296,7 +305,7 @@ export default function Predictor() {
 
       {/* Example logs */}
       <div className="bg-gray-800 p-4 rounded border border-gray-700">
-        <p className="text-sm text-gray-400 mb-3">💡 Try these log examples:</p>
+        <p className="text-sm text-gray-400 mb-3">💡 Спробуйте ці приклади логів:</p>
         <div className="space-y-2 text-xs">
           <button
             onClick={() => setLogs('ERROR: Database connection timeout after 30s')}

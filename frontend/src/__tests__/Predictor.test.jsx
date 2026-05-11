@@ -11,47 +11,47 @@ import Predictor from '../pages/Predictor'
 describe('Predictor – form rendering', () => {
   it('renders the page heading', () => {
     render(<Predictor />)
-    expect(screen.getByText('🔮 Predictor')).toBeInTheDocument()
+    expect(screen.getByText('🔮 Прогноз')).toBeInTheDocument()
   })
 
   it('renders the Pipeline ID input pre-filled', () => {
     render(<Predictor />)
-    const input = screen.getByPlaceholderText('e.g., jenkins-build-123')
+    const input = screen.getByPlaceholderText('напр., jenkins-build-123')
     expect(input).toBeInTheDocument()
     expect(input.value).toBe('jenkins-build-123')
   })
 
   it('renders the logs textarea with default value', () => {
     render(<Predictor />)
-    const textarea = screen.getByPlaceholderText('Paste log output here...')
+    const textarea = screen.getByPlaceholderText('Вставте логи сюди...')
     expect(textarea).toBeInTheDocument()
     expect(textarea.value).toBe('ERROR: Database connection timeout')
   })
 
   it('renders the Predict button', () => {
     render(<Predictor />)
-    expect(screen.getByRole('button', { name: /predict/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /прогнозувати|аналіз/i })).toBeInTheDocument()
   })
 
   it('Predict button is enabled when pipeline id and logs are provided', () => {
     render(<Predictor />)
-    const btn = screen.getByRole('button', { name: /predict/i })
+    const btn = screen.getByRole('button', { name: /прогнозувати|аналіз/i })
     expect(btn).not.toBeDisabled()
   })
 
   it('Predict button is disabled when pipeline id is empty', async () => {
     render(<Predictor />)
-    const input = screen.getByPlaceholderText('e.g., jenkins-build-123')
+    const input = screen.getByPlaceholderText('напр., jenkins-build-123')
     await userEvent.clear(input)
-    const btn = screen.getByRole('button', { name: /predict/i })
+    const btn = screen.getByRole('button', { name: /прогнозувати|аналіз/i })
     expect(btn).toBeDisabled()
   })
 
   it('Predict button is disabled when logs are empty', async () => {
     render(<Predictor />)
-    const textarea = screen.getByPlaceholderText('Paste log output here...')
+    const textarea = screen.getByPlaceholderText('Вставте логи сюди...')
     await userEvent.clear(textarea)
-    const btn = screen.getByRole('button', { name: /predict/i })
+    const btn = screen.getByRole('button', { name: /прогнозувати|аналіз/i })
     expect(btn).toBeDisabled()
   })
 })
@@ -59,7 +59,7 @@ describe('Predictor – form rendering', () => {
 describe('Predictor – user interaction', () => {
   it('updates pipeline ID input value on change', async () => {
     render(<Predictor />)
-    const input = screen.getByPlaceholderText('e.g., jenkins-build-123')
+    const input = screen.getByPlaceholderText('напр., jenkins-build-123')
     await userEvent.clear(input)
     await userEvent.type(input, 'my-new-pipeline')
     expect(input.value).toBe('my-new-pipeline')
@@ -67,7 +67,7 @@ describe('Predictor – user interaction', () => {
 
   it('updates logs textarea value on change', async () => {
     render(<Predictor />)
-    const textarea = screen.getByPlaceholderText('Paste log output here...')
+    const textarea = screen.getByPlaceholderText('Вставте логи сюди...')
     await userEvent.clear(textarea)
     await userEvent.type(textarea, 'Build started successfully')
     expect(textarea.value).toBe('Build started successfully')
@@ -77,28 +77,28 @@ describe('Predictor – user interaction', () => {
 describe('Predictor – API call and result rendering', () => {
   it('shows loading state while request is in flight', async () => {
     render(<Predictor />)
-    const btn = screen.getByRole('button', { name: /predict/i })
+    const btn = screen.getByRole('button', { name: /прогнозувати|аналіз/i })
     fireEvent.click(btn)
-    // Immediately after click the button text changes to ⏳ Analyzing...
-    expect(btn).toHaveTextContent('⏳ Analyzing...')
+    // Immediately after click the button text changes to "⏳ Аналіз..."
+    expect(btn).toHaveTextContent('⏳ Аналіз...')
   })
 
-  it('displays prediction risk level after successful response', async () => {
+  it('displays the Ukrainian risk-level label after a successful response', async () => {
     render(<Predictor />)
-    fireEvent.click(screen.getByRole('button', { name: /predict/i }))
+    fireEvent.click(screen.getByRole('button', { name: /прогнозувати|аналіз/i }))
 
-    // MSW returns PREDICTION_RESULT with risk_level "HIGH"
+    // MSW returns PREDICTION_RESULT with risk_level "HIGH" → "ВИСОКИЙ РИЗИК"
     await waitFor(() => {
-      expect(screen.getByText(/HIGH/i)).toBeInTheDocument()
+      expect(screen.getByText(/ВИСОКИЙ РИЗИК/)).toBeInTheDocument()
     })
   })
 
   it('displays the recommendation message after response', async () => {
     render(<Predictor />)
-    fireEvent.click(screen.getByRole('button', { name: /predict/i }))
+    fireEvent.click(screen.getByRole('button', { name: /прогнозувати|аналіз/i }))
 
     await waitFor(() => {
-      expect(screen.getByText(/CRITICAL/i)).toBeInTheDocument()
+      expect(screen.getByText(/КРИТИЧНО/)).toBeInTheDocument()
     })
   })
 })
@@ -106,7 +106,7 @@ describe('Predictor – API call and result rendering', () => {
 describe('Predictor – Drain parsed-log card', () => {
   it('renders the parsed-log card after a prediction', async () => {
     render(<Predictor />)
-    fireEvent.click(screen.getByRole('button', { name: /predict/i }))
+    fireEvent.click(screen.getByRole('button', { name: /прогнозувати|аналіз/i }))
 
     await waitFor(() => {
       expect(screen.getByTestId('parsed-log-card')).toBeInTheDocument()
@@ -115,7 +115,7 @@ describe('Predictor – Drain parsed-log card', () => {
 
   it('shows the Drain event template and id from the response', async () => {
     render(<Predictor />)
-    fireEvent.click(screen.getByRole('button', { name: /predict/i }))
+    fireEvent.click(screen.getByRole('button', { name: /прогнозувати|аналіз/i }))
 
     await waitFor(() => {
       const tmpl = screen.getByTestId('parsed-template')
@@ -127,7 +127,7 @@ describe('Predictor – Drain parsed-log card', () => {
 
   it('shows the extracted log level and service', async () => {
     render(<Predictor />)
-    fireEvent.click(screen.getByRole('button', { name: /predict/i }))
+    fireEvent.click(screen.getByRole('button', { name: /прогнозувати|аналіз/i }))
 
     await waitFor(() => {
       expect(screen.getByTestId('parsed-level')).toHaveTextContent('ERROR')
@@ -137,7 +137,7 @@ describe('Predictor – Drain parsed-log card', () => {
 
   it('renders extracted parameters as chips', async () => {
     render(<Predictor />)
-    fireEvent.click(screen.getByRole('button', { name: /predict/i }))
+    fireEvent.click(screen.getByRole('button', { name: /прогнозувати|аналіз/i }))
 
     await waitFor(() => {
       const params = screen.getByTestId('parsed-parameters')

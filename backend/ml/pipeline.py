@@ -57,13 +57,13 @@ class AIOpsPredictor:
         # 5. Determine risk level
         if risk_score > 0.7:
             risk_level = "HIGH"
-            recommendation = "🔴 CRITICAL: Anomaly detected + high failure forecast. Check logs immediately!"
+            recommendation = "🔴 КРИТИЧНО: виявлено аномалію та високий прогноз збоїв. Негайно перевірте логи!"
         elif risk_score > 0.4:
             risk_level = "MEDIUM"
-            recommendation = "🟡 WARNING: Elevated risk detected. Monitor closely."
+            recommendation = "🟡 УВАГА: виявлено підвищений ризик. Уважно стежте."
         else:
             risk_level = "LOW"
-            recommendation = "🟢 OK: System appears healthy."
+            recommendation = "🟢 OK: система працює нормально."
 
         # 6. SHAP explanation (graceful no-op until the supervised RF is trained)
         try:
