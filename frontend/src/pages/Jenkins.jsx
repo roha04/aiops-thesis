@@ -159,10 +159,10 @@ export default function Jenkins() {
 
   const chartData = comparison.map((c) => ({
     name: c.job_name.replace(/-/g, ' '),
-    'Actual Failures': c.actual_failures,
-    'Predicted Failures': c.predicted_failures,
-    'FP': c.false_positives,
-    'FN': c.false_negatives,
+    'Реальні збої':   c.actual_failures,
+    'Прогноз. збої':  c.predicted_failures,
+    'FP':             c.false_positives,
+    'FN':             c.false_negatives,
   }))
 
   // ── render ────────────────────────────────────────────────────────────────
@@ -172,9 +172,9 @@ export default function Jenkins() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">🔧 Jenkins Integration</h1>
+          <h1 className="text-3xl font-bold">🔧 Інтеграція з Jenkins</h1>
           <p className="text-gray-400 text-sm mt-1">
-            Real-time CI/CD monitoring · ML predictions · Failure tracking
+            Моніторинг CI/CD у реальному часі · ML-прогнози · Облік збоїв
           </p>
         </div>
 
@@ -183,7 +183,7 @@ export default function Jenkins() {
           <span className={`px-3 py-1 rounded-full text-xs font-semibold uppercase ${
             jenkinsMode === 'live' ? 'bg-green-900 text-green-300' : 'bg-yellow-900 text-yellow-300'
           }`}>
-            {jenkinsMode === 'live' ? '🟢 Live Jenkins' : '🟡 Demo Mode'}
+            {jenkinsMode === 'live' ? '🟢 Реальний Jenkins' : '🟡 Демо-режим'}
           </span>
 
           {/* Job filter */}
@@ -192,7 +192,7 @@ export default function Jenkins() {
             onChange={(e) => setSelectedJob(e.target.value)}
             className="bg-gray-800 border border-gray-600 rounded px-3 py-1 text-sm"
           >
-            <option value="">All Jobs</option>
+            <option value="">Усі завдання</option>
             {jobs.map((j) => (
               <option key={j.name} value={j.name}>{j.name}</option>
             ))}
@@ -203,14 +203,14 @@ export default function Jenkins() {
             disabled={syncing}
             className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 px-4 py-2 rounded text-sm font-semibold"
           >
-            {syncing ? '⏳ Syncing…' : '🔄 Sync Builds'}
+            {syncing ? '⏳ Синхронізація…' : '🔄 Синхронізувати збірки'}
           </button>
 
           <button
             onClick={streaming ? stopStream : startStream}
             className={`${streaming ? 'bg-red-600 hover:bg-red-700' : 'bg-purple-600 hover:bg-purple-700'} px-4 py-2 rounded text-sm font-semibold`}
           >
-            {streaming ? '⏹ Stop Demo' : '▶ Live Demo'}
+            {streaming ? '⏹ Зупинити демо' : '▶ Live-демо'}
           </button>
         </div>
       </div>
@@ -225,12 +225,12 @@ export default function Jenkins() {
       {overview && (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           {[
-            { label: 'Total Builds', value: overview.total_builds, color: 'text-white' },
-            { label: 'Actual Failures', value: overview.actual_failures, color: 'text-red-400' },
-            { label: 'Predicted Failures', value: overview.predicted_failures, color: 'text-yellow-400' },
-            { label: 'Correct Predictions', value: overview.correct_predictions, color: 'text-green-400' },
-            { label: 'Overall Accuracy', value: `${(overview.overall_accuracy * 100).toFixed(1)}%`, color: 'text-blue-400' },
-            { label: 'High-Risk Builds', value: overview.high_risk_builds, color: 'text-red-300' },
+            { label: 'Усього збірок', value: overview.total_builds, color: 'text-white' },
+            { label: 'Реальні збої', value: overview.actual_failures, color: 'text-red-400' },
+            { label: 'Прогнозовані збої', value: overview.predicted_failures, color: 'text-yellow-400' },
+            { label: 'Правильні прогнози', value: overview.correct_predictions, color: 'text-green-400' },
+            { label: 'Загальна точність', value: `${(overview.overall_accuracy * 100).toFixed(1)}%`, color: 'text-blue-400' },
+            { label: 'Високоризикові збірки', value: overview.high_risk_builds, color: 'text-red-300' },
           ].map(({ label, value, color }) => (
             <div key={label} className="bg-gray-800 p-4 rounded border border-gray-700">
               <p className="text-gray-400 text-xs">{label}</p>
@@ -243,10 +243,10 @@ export default function Jenkins() {
       {/* Tab bar */}
       <div className="flex gap-1 border-b border-gray-700">
         {[
-          { id: 'overview', label: '📊 Chart' },
-          { id: 'builds', label: '📋 Build History' },
-          { id: 'comparison', label: '🎯 Comparison Table' },
-          { id: 'stream', label: `📡 Live Stream${streaming ? ' 🔴' : ''}` },
+          { id: 'overview', label: '📊 Графік' },
+          { id: 'builds', label: '📋 Історія збірок' },
+          { id: 'comparison', label: '🎯 Таблиця порівняння' },
+          { id: 'stream', label: `📡 Live-стрім${streaming ? ' 🔴' : ''}` },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -265,10 +265,10 @@ export default function Jenkins() {
       {/* Tab content */}
       {activeTab === 'overview' && (
         <div className="bg-gray-800 p-6 rounded border border-gray-700">
-          <h2 className="text-xl font-bold mb-4">Actual vs Predicted Failures per Job</h2>
+          <h2 className="text-xl font-bold mb-4">Реальні vs прогнозовані збої — за кожним завданням</h2>
           {chartData.length === 0 ? (
             <p className="text-gray-400 text-center py-8">
-              No data yet. Click <strong>Sync Builds</strong> or run the <strong>Live Demo</strong>.
+              Даних поки немає. Натисніть <strong>Синхронізувати збірки</strong> або запустіть <strong>Live-демо</strong>.
             </p>
           ) : (
             <ResponsiveContainer width="100%" height={320}>
@@ -281,8 +281,8 @@ export default function Jenkins() {
                   labelStyle={{ color: '#f9fafb' }}
                 />
                 <Legend />
-                <Bar dataKey="Actual Failures" fill="#ef4444" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="Predicted Failures" fill="#f59e0b" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="Реальні збої" fill="#ef4444" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="Прогноз. збої" fill="#f59e0b" radius={[3, 3, 0, 0]} />
                 <Bar dataKey="FP" fill="#8b5cf6" radius={[3, 3, 0, 0]} />
                 <Bar dataKey="FN" fill="#ec4899" radius={[3, 3, 0, 0]} />
               </BarChart>
@@ -294,28 +294,28 @@ export default function Jenkins() {
       {activeTab === 'builds' && (
         <div className="bg-gray-800 rounded border border-gray-700 overflow-hidden">
           <div className="p-4 border-b border-gray-700">
-            <h2 className="text-lg font-bold">Build History{selectedJob ? ` — ${selectedJob}` : ''}</h2>
+            <h2 className="text-lg font-bold">Історія збірок{selectedJob ? ` — ${selectedJob}` : ''}</h2>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-700 text-gray-400 text-left">
-                  <th className="px-4 py-3">Job</th>
+                  <th className="px-4 py-3">Завдання</th>
                   <th className="px-4 py-3">#</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Risk</th>
-                  <th className="px-4 py-3">Predicted Fail</th>
-                  <th className="px-4 py-3">Actual Fail</th>
-                  <th className="px-4 py-3">Correct?</th>
-                  <th className="px-4 py-3">Recommendation</th>
-                  <th className="px-4 py-3">Time</th>
+                  <th className="px-4 py-3">Статус</th>
+                  <th className="px-4 py-3">Ризик</th>
+                  <th className="px-4 py-3">Прогноз. збій</th>
+                  <th className="px-4 py-3">Реальний збій</th>
+                  <th className="px-4 py-3">Правильно?</th>
+                  <th className="px-4 py-3">Рекомендація</th>
+                  <th className="px-4 py-3">Час</th>
                 </tr>
               </thead>
               <tbody>
                 {builds.length === 0 && (
                   <tr>
                     <td colSpan={9} className="text-center text-gray-500 py-8">
-                      No builds synced yet. Click <strong>Sync Builds</strong>.
+                      Ще немає синхронізованих збірок. Натисніть <strong>Синхронізувати збірки</strong>.
                     </td>
                   </tr>
                 )}
@@ -337,10 +337,10 @@ export default function Jenkins() {
                       {b.risk_level ?? '—'}
                     </td>
                     <td className="px-4 py-2 text-center">
-                      {b.predicted_failure == null ? '—' : b.predicted_failure ? '🔴 Yes' : '🟢 No'}
+                      {b.predicted_failure == null ? '—' : b.predicted_failure ? '🔴 Так' : '🟢 Ні'}
                     </td>
                     <td className="px-4 py-2 text-center">
-                      {b.actual_failure == null ? '—' : b.actual_failure ? '🔴 Yes' : '🟢 No'}
+                      {b.actual_failure == null ? '—' : b.actual_failure ? '🔴 Так' : '🟢 Ні'}
                     </td>
                     <td className="px-4 py-2 text-center">
                       <span className={`px-2 py-0.5 rounded text-xs ${correctBadge(b.prediction_correct)}`}>
@@ -366,27 +366,27 @@ export default function Jenkins() {
       {activeTab === 'comparison' && (
         <div className="bg-gray-800 rounded border border-gray-700 overflow-hidden">
           <div className="p-4 border-b border-gray-700">
-            <h2 className="text-lg font-bold">Prediction vs Reality — Per Job</h2>
+            <h2 className="text-lg font-bold">Прогноз vs реальність — за завданнями</h2>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-700 text-gray-400 text-left">
-                  <th className="px-4 py-3">Job</th>
-                  <th className="px-4 py-3 text-center">Total Builds</th>
-                  <th className="px-4 py-3 text-center">Actual Failures</th>
-                  <th className="px-4 py-3 text-center">Predicted Failures</th>
-                  <th className="px-4 py-3 text-center">Correct</th>
-                  <th className="px-4 py-3 text-center">False Positives</th>
-                  <th className="px-4 py-3 text-center">False Negatives</th>
-                  <th className="px-4 py-3 text-center">Accuracy</th>
+                  <th className="px-4 py-3">Завдання</th>
+                  <th className="px-4 py-3 text-center">Усього збірок</th>
+                  <th className="px-4 py-3 text-center">Реальні збої</th>
+                  <th className="px-4 py-3 text-center">Прогноз. збої</th>
+                  <th className="px-4 py-3 text-center">Правильно</th>
+                  <th className="px-4 py-3 text-center">Хибно позитивні</th>
+                  <th className="px-4 py-3 text-center">Хибно негативні</th>
+                  <th className="px-4 py-3 text-center">Точність</th>
                 </tr>
               </thead>
               <tbody>
                 {comparison.length === 0 && (
                   <tr>
                     <td colSpan={8} className="text-center text-gray-500 py-8">
-                      No comparison data yet. Sync builds first.
+                      Ще немає даних для порівняння. Спершу синхронізуйте збірки.
                     </td>
                   </tr>
                 )}
@@ -419,22 +419,22 @@ export default function Jenkins() {
         <div className="space-y-3">
           <div className="bg-gray-800 p-4 rounded border border-gray-700 flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-bold">📡 Real-Time Build Stream</h2>
+              <h2 className="text-lg font-bold">📡 Потік збірок у реальному часі</h2>
               <p className="text-xs text-gray-400 mt-1">
-                SSE feed — each event is a Jenkins build with instant ML prediction.
+                SSE-канал — кожна подія це збірка Jenkins із миттєвим ML-прогнозом.
               </p>
             </div>
             {streaming && (
               <span className="flex items-center gap-2 text-red-400 text-sm animate-pulse">
                 <span className="w-2 h-2 bg-red-500 rounded-full"></span>
-                LIVE
+                В ЕФІРІ
               </span>
             )}
           </div>
 
           {streamLog.length === 0 && !streaming && (
             <div className="bg-gray-800 p-8 rounded border border-gray-700 text-center text-gray-500">
-              Press <strong>▶ Live Demo</strong> to start streaming real-time builds with ML predictions.
+              Натисніть <strong>▶ Live-демо</strong>, щоб почати трансляцію збірок із ML-прогнозами в реальному часі.
             </div>
           )}
 
@@ -445,20 +445,20 @@ export default function Jenkins() {
                 className="bg-gray-800 border border-gray-700 rounded p-4 grid grid-cols-1 md:grid-cols-5 gap-3 items-center"
               >
                 <div>
-                  <p className="text-xs text-gray-400">Job</p>
+                  <p className="text-xs text-gray-400">Завдання</p>
                   <p className="font-mono text-sm">{b.job_name}</p>
                   <p className="text-xs text-gray-500">#{b.build_number}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-400">Status</p>
+                  <p className="text-xs text-gray-400">Статус</p>
                   <span className={`px-2 py-0.5 rounded text-xs ${statusBadge(b.status)}`}>
                     {b.status}
                   </span>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-400">ML Prediction</p>
+                  <p className="text-xs text-gray-400">ML-прогноз</p>
                   <p className="text-sm">
-                    {b.predicted_failure ? '🔴 Failure' : '🟢 Success'}
+                    {b.predicted_failure ? '🔴 Збій' : '🟢 Успіх'}
                     {b.prediction_confidence != null && (
                       <span className="text-xs text-gray-500 ml-1">
                         ({(b.prediction_confidence * 100).toFixed(0)}%)
@@ -467,15 +467,15 @@ export default function Jenkins() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-400">Risk</p>
+                  <p className="text-xs text-gray-400">Ризик</p>
                   <p className={`font-semibold text-sm ${riskColour(b.risk_level)}`}>
                     {b.risk_level ?? '—'}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-400">Correct?</p>
+                  <p className="text-xs text-gray-400">Правильно?</p>
                   <span className={`px-2 py-0.5 rounded text-xs ${correctBadge(b.prediction_correct)}`}>
-                    {b.prediction_correct == null ? '—' : b.prediction_correct ? '✓ Yes' : '✗ No'}
+                    {b.prediction_correct == null ? '—' : b.prediction_correct ? '✓ Так' : '✗ Ні'}
                   </span>
                 </div>
               </div>

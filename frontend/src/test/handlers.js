@@ -38,7 +38,7 @@ export const ALERTS = [
       timestamp: '2026-03-24T09:00:00',
       pipeline_id: 'jenkins-deploy',
       severity: 'CRITICAL',
-      message: 'Database connection timeout',
+      message: 'Тайм-аут підключення до бази даних',
       is_resolved: false,
     },
   },
@@ -48,7 +48,7 @@ export const ALERTS = [
       timestamp: '2026-03-24T08:30:00',
       pipeline_id: 'jenkins-test',
       severity: 'WARNING',
-      message: 'Memory usage high',
+      message: 'Високе використання пам’яті',
       is_resolved: true,
     },
   },
@@ -80,7 +80,7 @@ export const PREDICTION_RESULT = {
   prediction: {
     risk_level: 'HIGH',
     score: 0.82,
-    recommendation: '🔴 CRITICAL: Anomaly detected. Check logs immediately!',
+    recommendation: '🔴 КРИТИЧНО: виявлено аномалію. Негайно перевірте логи!',
     shap_explanation: {
       model: 'Random Forest',
       base_value: 0.5,
