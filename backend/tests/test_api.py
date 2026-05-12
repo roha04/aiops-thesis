@@ -628,3 +628,154 @@ class TestLogTemplatesEndpoint:
         # Endpoint must accept the query param without error
         response = client.get("/api/analytics/log-templates?top_k=5")
         assert response.status_code == 200
+
+
+# ════════════════════════════════════════════════════════
+# POST /api/jenkins/webhook
+# ════════════════════════════════════════════════════════
+
+class TestJenkinsWebhookEndpoint:
+    """The webhook lets Jenkins push build completion events instead of
+    forcing the backend to poll. These tests use TestClient (no real
+    Jenkins server) — the connector returns ``None`` for missing data."""
+
+    def test_returns_200_for_minimal_payload(self, client):
+        response = client.post(
+            "/api/jenkins/webhook",
+            json={
+                "job_name": "backend-tests",
+                "build_number": 1,
+                "status": "SUCCESS",
+            },
+        )
+        assert response.status_code == 200
+
+    def test_response_contains_processed_build(self, client):
+        response = client.post(
+            "/api/jenkins/webhook",
+            json={
+                "job_name": "frontend-build",
+                "build_number": 7,
+                "status": "FAILURE",
+                "log": "npm ERR! ELIFECYCLE\nBuild FAILED",
+            },
+        )
+        body = response.json()
+        assert body["received"] is True
+        build = body["build"]
+        assert build["job_name"] == "frontend-build"
+        assert build["build_number"] == 7
+        assert build["status"] == "FAILURE"
+        assert build["actual_failure"] is True
+        # ML pipeline ran on the supplied log
+        assert build["risk_level"] in ("LOW", "MEDIUM", "HIGH", "UNKNOWN")
+
+    def test_missing_job_name_returns_400(self, client):
+        response = client.post(
+            "/api/jenkins/webhook",
+            json={"build_number": 1, "status": "SUCCESS"},
+        )
+        assert response.status_code == 400
+
+    def test_missing_build_number_returns_400(self, client):
+        response = client.post(
+            "/api/jenkins/webhook",
+            json={"job_name": "deploy", "status": "SUCCESS"},
+        )
+        assert response.status_code == 400
+
+    def test_non_integer_build_number_returns_400(self, client):
+        response = client.post(
+            "/api/jenkins/webhook",
+            json={"job_name": "deploy", "build_number": "abc", "status": "SUCCESS"},
+        )
+        assert response.status_code == 400
+
+    def test_invalid_json_returns_400(self, client):
+        response = client.post(
+            "/api/jenkins/webhook",
+            content=b"not-json",
+            headers={"Content-Type": "application/json"},
+        )
+        assert response.status_code == 400
+
+    def test_build_is_persisted_in_db(self, client, db_session):
+        from db.models import JenkinsBuild
+
+        client.post(
+            "/api/jenkins/webhook",
+            json={
+                "job_name": "integration-tests",
+                "build_number": 99,
+                "status": "FAILURE",
+                "log": "ERROR Database timeout",
+            },
+        )
+        row = (
+            db_session.query(JenkinsBuild)
+            .filter_by(job_name="integration-tests", build_number=99)
+            .first()
+        )
+        assert row is not None
+        assert row.status == "FAILURE"
+        assert row.actual_failure is True
+
+    def test_success_status_sets_actual_failure_false(self, client):
+        body = client.post(
+            "/api/jenkins/webhook",
+            json={
+                "job_name": "deploy-staging",
+                "build_number": 12,
+                "status": "SUCCESS",
+                "log": "All tests passed\nBUILD SUCCESS",
+            },
+        ).json()
+        assert body["build"]["actual_failure"] is False
+
+    def test_upsert_overwrites_same_build_number(self, client):
+        """A second webhook for the same build should update the row,
+        not create a duplicate."""
+        first = client.post(
+            "/api/jenkins/webhook",
+            json={"job_name": "backend-tests", "build_number": 42, "status": "SUCCESS"},
+        ).json()
+        second = client.post(
+            "/api/jenkins/webhook",
+            json={"job_name": "backend-tests", "build_number": 42, "status": "FAILURE"},
+        ).json()
+
+        assert first["build"]["id"] == second["build"]["id"]
+        assert second["build"]["status"] == "FAILURE"
+
+
+# ════════════════════════════════════════════════════════
+# GET /api/jenkins/webhook-info
+# ════════════════════════════════════════════════════════
+
+class TestJenkinsWebhookInfoEndpoint:
+
+    def test_returns_200(self, client):
+        assert client.get("/api/jenkins/webhook-info").status_code == 200
+
+    def test_describes_webhook_route(self, client):
+        body = client.get("/api/jenkins/webhook-info").json()
+        assert body["url"] == "/api/jenkins/webhook"
+        assert body["method"] == "POST"
+
+    def test_includes_subscriber_count(self, client):
+        body = client.get("/api/jenkins/webhook-info").json()
+        assert "live_subscribers" in body
+        assert isinstance(body["live_subscribers"], int)
+
+
+# ════════════════════════════════════════════════════════
+# POST /api/jenkins/trigger/{job}  (Jenkins offline)
+# ════════════════════════════════════════════════════════
+
+class TestJenkinsTriggerEndpoint:
+
+    def test_returns_503_when_jenkins_unreachable(self, client):
+        # In tests there is no live Jenkins, so the connector returns False
+        # for is_reachable() and the endpoint should respond 503.
+        response = client.post("/api/jenkins/trigger/backend-tests")
+        assert response.status_code == 503

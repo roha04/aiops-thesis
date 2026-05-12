@@ -1,0 +1,36 @@
+# ────────────────────────────────────────────────────────────────────────────
+# Jenkins Configuration as Code — AIOps demo
+# Creates an admin user, opens basic permissions, and points Jenkins at
+# itself on http://localhost:8080.
+#
+# Jobs are NOT defined here; they live as config.xml files under jobs/.
+# That keeps each pipeline script readable (no YAML-inside-Groovy escaping).
+# ────────────────────────────────────────────────────────────────────────────
+jenkins:
+  systemMessage: "AIOps Platform — Local Jenkins (Configuration as Code)"
+  numExecutors: 4
+  mode: NORMAL
+  scmCheckoutRetryCount: 2
+
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: "admin"
+          password: "admin"
+
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: true
+
+  remotingSecurity:
+    enabled: true
+
+  crumbIssuer:
+    standard:
+      excludeClientIPFromCrumb: true
+
+unclassified:
+  location:
+    url: "http://localhost:8080/"
+    adminAddress: "admin@aiops.local"

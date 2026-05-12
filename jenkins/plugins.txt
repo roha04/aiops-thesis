@@ -1,0 +1,10 @@
+configuration-as-code:latest
+workflow-aggregator:latest
+pipeline-stage-view:latest
+git:latest
+timestamper:latest
+build-timeout:latest
+ws-cleanup:latest
+credentials-binding:latest
+matrix-auth:latest
+job-dsl:latest

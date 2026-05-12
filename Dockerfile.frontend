@@ -1,0 +1,26 @@
+# syntax=docker/dockerfile:1.6
+# ─────────────────────────────────────────────────────────────────────────────
+# AIOps frontend (Vite + React)
+#
+# Dev server only — production builds are served via `vite build` if needed.
+# Build from the repo root:
+#   docker build -f Dockerfile.frontend -t aiops-frontend .
+# ─────────────────────────────────────────────────────────────────────────────
+FROM node:20-alpine
+
+ENV NODE_ENV=development \
+    CI=true
+
+WORKDIR /app
+
+# Install deps first so the layer caches well
+COPY frontend/package.json frontend/package-lock.json /app/
+RUN npm ci --no-audit --no-fund
+
+# Source
+COPY frontend/ /app/
+
+EXPOSE 5173
+
+# Vite needs --host to listen outside the container
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"]

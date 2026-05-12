@@ -1,0 +1,69 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job">
+  <description>Mock deployment job. Almost always succeeds, but every now and then surfaces a real-looking OOM kill.</description>
+  <keepDependencies>false</keepDependencies>
+  <properties/>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps">
+    <script>pipeline {
+    agent any
+    options {
+        timestamps()
+        buildDiscarder(logRotator(numToKeepStr: '20'))
+        timeout(time: 5, unit: 'MINUTES')
+    }
+
+    stages {
+        stage('Build image') {
+            steps {
+                sh '''
+                    echo "[deploy-staging] docker build -t aiops-backend ."
+                    sleep 1
+                    echo "Successfully tagged aiops-backend:latest"
+                '''
+            }
+        }
+        stage('Deploy') {
+            steps {
+                sh '''
+                    set +e
+                    echo "[deploy-staging] kubectl rollout restart deployment/aiops-backend"
+                    PICK=$((RANDOM % 6))
+                    if [ "$PICK" -eq 0 ]; then
+                        echo "FATAL: Out of memory - Java heap space"
+                        echo "Killed (OOMKilled)"
+                        echo "kubectl rollout error: pod aiops-backend-7d9-xqz crashed"
+                        echo "Build FAILURE"
+                        sleep 1
+                        exit 1
+                    fi
+                    sleep 1
+                    echo "Deployment ready: 2/2 pods healthy"
+                    echo "BUILD SUCCESS"
+                '''
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                def result    = currentBuild.currentResult ?: 'UNKNOWN'
+                def duration  = currentBuild.duration ?: 0
+                def payload   = "{\"job_name\":\"${env.JOB_NAME}\",\"build_number\":${env.BUILD_NUMBER},\"status\":\"${result}\",\"duration_ms\":${duration},\"url\":\"${env.BUILD_URL}\"}"
+                sh """
+                    curl -fsS -X POST \\
+                         -H 'Content-Type: application/json' \\
+                         -d '${payload}' \\
+                         http://backend:8000/api/jenkins/webhook \\
+                      || echo 'webhook unreachable'
+                """
+            }
+        }
+    }
+}
+</script>
+    <sandbox>false</sandbox>
+  </definition>
+  <triggers/>
+  <disabled>false</disabled>
+</flow-definition>

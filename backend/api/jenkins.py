@@ -4,16 +4,19 @@ Jenkins Integration API
 - Sync builds: fetch logs + run ML predictions
 - Track actual failures vs predictions
 - SSE endpoint for real-time streaming demo
+- POST /webhook endpoint Jenkins hits on build completion
+  for true real-time reactions (no polling)
 """
 
 import asyncio
 import json
 import logging
+import os
 import random
 from datetime import datetime
 from typing import Optional, AsyncGenerator
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -26,6 +29,28 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/jenkins", tags=["jenkins"])
 
 _predictor = AIOpsPredictor()
+
+# Optional shared secret. When set, the webhook requires a matching
+# X-Webhook-Token header (configured in the Jenkins pipeline post step).
+WEBHOOK_SECRET = os.getenv("JENKINS_WEBHOOK_SECRET", "")
+
+# ─── in-memory pub-sub for live SSE ────────────────────────────────────────
+# Each connected EventSource client gets its own asyncio.Queue. Webhook
+# handler and demo stream push events here; subscribers drain them.
+_subscribers: "set[asyncio.Queue[str]]" = set()
+
+
+def _broadcast(payload: dict) -> None:
+    """Fan-out a build event to every connected SSE subscriber."""
+    if not _subscribers:
+        return
+    msg = json.dumps(payload, default=str)
+    for q in list(_subscribers):
+        try:
+            q.put_nowait(msg)
+        except asyncio.QueueFull:
+            # subscriber is too slow; drop the event for them only
+            logger.debug("Dropping event for slow SSE subscriber")
 
 
 # ─── helpers ──────────────────────────────────────────────────────────────────
@@ -156,6 +181,25 @@ def get_builds(
     """Return raw builds for a job (no DB, no prediction)."""
     builds = jenkins.get_builds(job_name, count)
     return {"job_name": job_name, "builds": builds}
+
+
+@router.post("/trigger/{job_name}")
+def trigger_build(job_name: str):
+    """
+    Kick off a build of `job_name` on the configured Jenkins instance.
+    Returns 503 when Jenkins is unreachable so the UI can show a clean
+    message instead of a generic 5xx.
+    """
+    if not jenkins.is_reachable():
+        raise HTTPException(
+            status_code=503, detail="Jenkins is not reachable from the backend",
+        )
+    ok = jenkins.trigger_build(job_name)
+    if not ok:
+        raise HTTPException(
+            status_code=502, detail=f"Jenkins refused to trigger '{job_name}'",
+        )
+    return {"triggered": True, "job_name": job_name}
 
 
 @router.post("/sync")
@@ -315,8 +359,11 @@ async def _demo_stream(db: Session) -> AsyncGenerator[str, None]:
         }
         prediction = _run_prediction(log, job)
         row = _upsert_build(db, raw, prediction)
-        payload = json.dumps(_row_to_dict(row))
-        yield f"data: {payload}\n\n"
+        record = _row_to_dict(row)
+        # Also fan out to live SSE listeners so the same UI panel can
+        # show both real webhook events and demo events.
+        _broadcast({"event": "build", **record})
+        yield f"data: {json.dumps(record)}\n\n"
         build_num += 1
 
     yield "data: {\"done\": true}\n\n"
@@ -336,3 +383,164 @@ async def stream_demo(db: Session = Depends(get_db)):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+# ─── live webhook + live SSE (real Jenkins) ───────────────────────────────────
+
+@router.post("/webhook")
+async def jenkins_webhook(
+    request: Request,
+    db: Session = Depends(get_db),
+    x_webhook_token: Optional[str] = Header(default=None, alias="X-Webhook-Token"),
+):
+    """
+    Receive a Jenkins build-completed event.
+
+    Jenkins pipelines call this in their ``post { always { ... } }`` block.
+    The body is JSON like:
+
+        {
+          "job_name":     "backend-tests",
+          "build_number": 42,
+          "status":       "SUCCESS" | "FAILURE" | "UNSTABLE" | "ABORTED",
+          "duration_ms":  1234,            # optional
+          "url":          "http://jenkins:8080/job/.../42/",  # optional
+          "log":          "...truncated console output..."     # optional
+        }
+
+    On receipt we:
+      1. Fetch the full log via the Jenkins connector if not supplied.
+      2. Run the ML pipeline on it.
+      3. Upsert into ``jenkins_builds``.
+      4. Broadcast the event to all live SSE subscribers.
+    """
+    if WEBHOOK_SECRET and x_webhook_token != WEBHOOK_SECRET:
+        raise HTTPException(status_code=401, detail="invalid webhook token")
+
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="body must be JSON")
+
+    job_name = payload.get("job_name")
+    build_number = payload.get("build_number")
+
+    if not job_name or build_number is None:
+        raise HTTPException(
+            status_code=400,
+            detail="job_name and build_number are required",
+        )
+
+    try:
+        build_number = int(build_number)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="build_number must be int")
+
+    # Status from Jenkins comes through as e.g. "SUCCESS" / "FAILURE" /
+    # "UNSTABLE". Treat anything that isn't SUCCESS/IN_PROGRESS as a failure.
+    raw_status = (payload.get("status") or "").upper() or "UNKNOWN"
+
+    # If the pipeline didn't ship the log, try to pull it from Jenkins now.
+    log_text: str = payload.get("log") or ""
+    if not log_text:
+        fetched = jenkins.get_build_log(job_name, build_number)
+        log_text = fetched or ""
+
+    # Pull canonical metadata if the pipeline omitted things.
+    duration_ms = payload.get("duration_ms")
+    build_url = payload.get("url") or ""
+    timestamp_iso = payload.get("timestamp")
+
+    if duration_ms is None or not build_url or not timestamp_iso:
+        info = jenkins.get_build(job_name, build_number)
+        if info:
+            duration_ms = duration_ms if duration_ms is not None else info.get("duration_ms")
+            build_url = build_url or info.get("url", "")
+            timestamp_iso = timestamp_iso or info.get("timestamp")
+            if raw_status in ("UNKNOWN", ""):
+                raw_status = (info.get("status") or raw_status).upper()
+
+    raw_build = {
+        "job_name": job_name,
+        "build_number": build_number,
+        "status": raw_status,
+        "duration_ms": duration_ms,
+        "url": build_url,
+        "timestamp": timestamp_iso or datetime.utcnow().isoformat(),
+        "log": log_text,
+        "demo": False,
+    }
+
+    prediction = _run_prediction(log_text, job_name)
+    row = _upsert_build(db, raw_build, prediction)
+    record = _row_to_dict(row)
+
+    # Fire-and-forget broadcast to every connected EventSource.
+    _broadcast({"event": "build", **record})
+
+    logger.info(
+        "Jenkins webhook ▸ %s #%s status=%s predicted_failure=%s",
+        job_name, build_number, raw_status, record.get("predicted_failure"),
+    )
+
+    return {"received": True, "build": record}
+
+
+async def _live_stream() -> AsyncGenerator[str, None]:
+    """Yield SSE events as they're broadcast from the webhook."""
+    q: asyncio.Queue[str] = asyncio.Queue(maxsize=200)
+    _subscribers.add(q)
+    try:
+        # Initial hello so the client knows the channel is live.
+        hello = json.dumps({
+            "event": "connected",
+            "subscribers": len(_subscribers),
+            "ts": datetime.utcnow().isoformat(),
+        })
+        yield f"data: {hello}\n\n"
+
+        while True:
+            try:
+                msg = await asyncio.wait_for(q.get(), timeout=15.0)
+                yield f"data: {msg}\n\n"
+            except asyncio.TimeoutError:
+                # SSE comment line keeps proxies / browsers from closing
+                # the connection during periods of inactivity.
+                yield ": keepalive\n\n"
+    except asyncio.CancelledError:
+        # Client disconnected
+        raise
+    finally:
+        _subscribers.discard(q)
+
+
+@router.get("/stream-live")
+async def stream_live():
+    """
+    Live SSE channel: pushes a JSON event every time a Jenkins build
+    finishes and hits ``/api/jenkins/webhook``.
+    """
+    return StreamingResponse(
+        _live_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
+@router.get("/webhook-info")
+def webhook_info():
+    """
+    Tell the frontend whether webhooks are wired up and how to call them.
+    Used by the Jenkins page to render the integration badge.
+    """
+    return {
+        "url": "/api/jenkins/webhook",
+        "method": "POST",
+        "secret_required": bool(WEBHOOK_SECRET),
+        "live_subscribers": len(_subscribers),
+        "jenkins_reachable": jenkins.is_reachable(),
+    }
