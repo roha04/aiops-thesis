@@ -26,34 +26,34 @@ describe('Layout – sidebar navigation', () => {
 
   it('renders all six navigation menu items', () => {
     renderLayout()
-    expect(screen.getByText('📊 Dashboard')).toBeInTheDocument()
-    expect(screen.getByText('🔮 Predictor')).toBeInTheDocument()
-    expect(screen.getByText('📈 Analytics')).toBeInTheDocument()
-    expect(screen.getByText('📚 History')).toBeInTheDocument()
-    expect(screen.getByText('🚨 Alerts')).toBeInTheDocument()
+    expect(screen.getByText('📊 Панель')).toBeInTheDocument()
+    expect(screen.getByText('🔮 Прогноз')).toBeInTheDocument()
+    expect(screen.getByText('📈 Аналітика')).toBeInTheDocument()
+    expect(screen.getByText('📚 Історія')).toBeInTheDocument()
+    expect(screen.getByText('🚨 Сповіщення')).toBeInTheDocument()
     expect(screen.getByText('🔧 Jenkins')).toBeInTheDocument()
   })
 
   it('calls setPage with the correct id when a menu item is clicked', () => {
     const { setPage } = renderLayout()
-    fireEvent.click(screen.getByText('🔮 Predictor'))
+    fireEvent.click(screen.getByText('🔮 Прогноз'))
     expect(setPage).toHaveBeenCalledWith('predictor')
   })
 
   it('highlights the currently active menu item', () => {
     renderLayout({ page: 'alerts' })
-    const alertsBtn = screen.getByText('🚨 Alerts').closest('button')
+    const alertsBtn = screen.getByText('🚨 Сповіщення').closest('button')
     expect(alertsBtn).toHaveClass('bg-blue-600')
   })
 
-  it('shows "Online" when backend is online', () => {
+  it('shows "Онлайн" when backend is online', () => {
     renderLayout({ backendOnline: true })
-    expect(screen.getByText('Online')).toBeInTheDocument()
+    expect(screen.getByText('Онлайн')).toBeInTheDocument()
   })
 
-  it('shows "Offline" when backend is offline', () => {
+  it('shows "Офлайн" when backend is offline', () => {
     renderLayout({ backendOnline: false })
-    expect(screen.getByText('Offline')).toBeInTheDocument()
+    expect(screen.getByText('Офлайн')).toBeInTheDocument()
   })
 
   it('toggles sidebar open/closed on menu button click', () => {

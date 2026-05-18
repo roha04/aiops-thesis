@@ -8,7 +8,7 @@ import Dashboard from '../pages/Dashboard'
 describe('Dashboard – loading state', () => {
   it('shows loading spinner initially', () => {
     render(<Dashboard />)
-    expect(screen.getByText(/loading/i)).toBeInTheDocument()
+    expect(screen.getByText(/завантаження/i)).toBeInTheDocument()
   })
 })
 
@@ -16,14 +16,14 @@ describe('Dashboard – after data loads', () => {
   it('renders the heading', async () => {
     render(<Dashboard />)
     await waitFor(() => {
-      expect(screen.getByText('📊 Dashboard')).toBeInTheDocument()
+      expect(screen.getByText('📊 Панель')).toBeInTheDocument()
     })
   })
 
   it('renders Total Alerts KPI card', async () => {
     render(<Dashboard />)
     await waitFor(() => {
-      expect(screen.getByText('Total Alerts (7d)')).toBeInTheDocument()
+      expect(screen.getByText('Усього сповіщень (7 днів)')).toBeInTheDocument()
       // Mock returns total_alerts: 12
       expect(screen.getByText('12')).toBeInTheDocument()
     })
@@ -32,7 +32,7 @@ describe('Dashboard – after data loads', () => {
   it('renders Model Accuracy KPI card with correct value', async () => {
     render(<Dashboard />)
     await waitFor(() => {
-      expect(screen.getByText('Model Accuracy')).toBeInTheDocument()
+      expect(screen.getByText('Точність моделі')).toBeInTheDocument()
       // accuracy 0.92 → "92.0%"
       expect(screen.getByText('92.0%')).toBeInTheDocument()
     })
@@ -41,7 +41,7 @@ describe('Dashboard – after data loads', () => {
   it('renders F1 Score KPI card', async () => {
     render(<Dashboard />)
     await waitFor(() => {
-      expect(screen.getByText('F1 Score')).toBeInTheDocument()
+      expect(screen.getByText('F1-міра')).toBeInTheDocument()
       // f1_score 0.895 → "0.895"
       expect(screen.getByText('0.895')).toBeInTheDocument()
     })
@@ -50,7 +50,7 @@ describe('Dashboard – after data loads', () => {
   it('renders Critical Issues KPI card', async () => {
     render(<Dashboard />)
     await waitFor(() => {
-      expect(screen.getByText('Critical Issues')).toBeInTheDocument()
+      expect(screen.getByText('Критичні проблеми')).toBeInTheDocument()
       // critical_issues: 3
       expect(screen.getByText('3')).toBeInTheDocument()
     })
@@ -59,14 +59,14 @@ describe('Dashboard – after data loads', () => {
   it('renders Precision metric', async () => {
     render(<Dashboard />)
     await waitFor(() => {
-      expect(screen.getByText('Precision')).toBeInTheDocument()
+      expect(screen.getByText('Прецизійність')).toBeInTheDocument()
     })
   })
 
   it('renders Recall metric', async () => {
     render(<Dashboard />)
     await waitFor(() => {
-      expect(screen.getByText('Recall')).toBeInTheDocument()
+      expect(screen.getByText('Повнота')).toBeInTheDocument()
     })
   })
 })

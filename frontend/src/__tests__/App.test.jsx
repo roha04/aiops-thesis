@@ -13,22 +13,22 @@ describe('App – initial render', () => {
     render(<App />)
     // Wait for health check to resolve and layout to paint
     await waitFor(() => {
-      expect(screen.getByText('AIOps Platform')).toBeInTheDocument()
+      expect(screen.getByText('Платформа AIOps')).toBeInTheDocument()
     })
   })
 
   it('shows the Dashboard page by default', async () => {
     render(<App />)
     await waitFor(() => {
-      expect(screen.getByText('📊 Dashboard')).toBeInTheDocument()
+      expect(screen.getByText('📊 Панель')).toBeInTheDocument()
     })
   })
 
-  it('shows "Online" status when backend health check succeeds', async () => {
+  it('shows online status when backend health check succeeds', async () => {
     render(<App />)
     // MSW returns ok for /health
     await waitFor(() => {
-      expect(screen.getByText('Online')).toBeInTheDocument()
+      expect(screen.getByText('Онлайн')).toBeInTheDocument()
     })
   })
 })
@@ -36,23 +36,23 @@ describe('App – initial render', () => {
 describe('App – navigation', () => {
   it('switches to Predictor page when Predictor nav item is clicked', async () => {
     render(<App />)
-    await waitFor(() => screen.getByText('🔮 Predictor'))
+    await waitFor(() => screen.getByText('🔮 Прогноз'))
 
-    fireEvent.click(screen.getByText('🔮 Predictor'))
+    fireEvent.click(screen.getByText('🔮 Прогноз'))
     await waitFor(() => {
       // Predictor page renders its own heading
-      const headings = screen.getAllByText('🔮 Predictor')
+      const headings = screen.getAllByText('🔮 Прогноз')
       expect(headings.length).toBeGreaterThanOrEqual(1)
     })
   })
 
   it('switches to Alerts page when Alerts nav item is clicked', async () => {
     render(<App />)
-    await waitFor(() => screen.getByText('🚨 Alerts'))
+    await waitFor(() => screen.getByText('🚨 Сповіщення'))
 
-    fireEvent.click(screen.getByText('🚨 Alerts'))
+    fireEvent.click(screen.getByText('🚨 Сповіщення'))
     await waitFor(() => {
-      const headings = screen.getAllByText('🚨 Alerts')
+      const headings = screen.getAllByText(/Сповіщення/i)
       expect(headings.length).toBeGreaterThanOrEqual(1)
     })
   })
