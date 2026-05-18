@@ -126,63 +126,8 @@ pytest tests/
 ## 🐳 Docker Deployment
 
 ```bash
-docker-compose up -d --build
+docker-compose up -d
 ```
-
-This brings up the full stack including a local **Jenkins** with four
-pre-configured pipeline jobs that POST to the backend webhook on every build.
-
-| Service       | URL                                                  | Login           |
-|---------------|------------------------------------------------------|-----------------|
-| Frontend      | http://localhost:5173                                | —               |
-| Backend / API | http://localhost:8000 (docs at `/docs`)              | —               |
-| Jenkins       | http://localhost:8080                                | `admin` / `admin` |
-| Postgres      | localhost:5432                                       | postgres / postgres |
-| Elasticsearch | http://localhost:9200                                | —               |
-
-## 🔧 Live Jenkins integration
-
-The `jenkins/` folder builds a Jenkins-LTS image that:
-
-  - installs `configuration-as-code`, `workflow-aggregator`, `job-dsl`, etc.
-  - boots a single `admin/admin` user (no setup wizard)
-  - seeds **four pipeline jobs**: `backend-tests`, `frontend-build`,
-    `integration-tests`, `deploy-staging`
-  - each job's `post { always }` step POSTs to
-    `http://backend:8000/api/jenkins/webhook` so the platform reacts in
-    real time — no polling.
-
-End-to-end flow:
-
-```text
-                ┌─ Jenkins job finishes
-                │
-                ▼
-POST /api/jenkins/webhook  ──►  ML pipeline runs on the log
-                                │
-                                ├─► JenkinsBuild row upserted
-                                │
-                                └─► Event broadcast on
-                                    GET /api/jenkins/stream-live (SSE)
-                                                │
-                                                ▼
-                                    Frontend "🪝 Webhooks" tab
-                                    shows the build + ML verdict
-                                    instantly.
-```
-
-Try it live:
-
-  1. `docker-compose up -d --build`
-  2. Open the frontend at http://localhost:5173, go to **🔧 Jenkins → 🪝 Webhooks**.
-     The badge should flip to **📡 Webhook LIVE** within a few seconds.
-  3. Click any **▶ job-name** button (or trigger from the Jenkins UI).
-     The completed build appears in the Webhooks tab the moment Jenkins
-     finishes — typically 2–4 seconds later.
-
-Optional hardening: set `JENKINS_WEBHOOK_SECRET` in `docker-compose.yml`
-and add `-H 'X-Webhook-Token: <secret>'` to the curl call inside each
-`jenkins/jobs/*/config.xml`.
 
 ## 📚 Documentation
 

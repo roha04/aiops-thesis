@@ -30,26 +30,8 @@ services:
     ports:
       - "6379:6379"
 
-  # ───────────────────────────────────────────────────────────────────────────
-  # Local Jenkins. Boots with 4 pre-configured pipeline jobs that POST to the
-  # backend on every build completion (see jenkins/jobs/*/config.xml).
-  # ───────────────────────────────────────────────────────────────────────────
-  jenkins:
-    build: ./jenkins
-    container_name: aiops-jenkins
-    ports:
-      - "8080:8080"
-      - "50000:50000"
-    environment:
-      JENKINS_OPTS: "--httpPort=8080"
-    volumes:
-      - jenkins_home:/var/jenkins_home
-    restart: unless-stopped
-
   backend:
-    build:
-      context: .
-      dockerfile: Dockerfile.backend
+    build: ./backend
     container_name: aiops-backend
     ports:
       - "8000:8000"
@@ -57,35 +39,24 @@ services:
       ELASTICSEARCH_HOST: elasticsearch
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/aiops
       REDIS_URL: redis://redis:6379
-      JENKINS_URL: http://jenkins:8080
-      JENKINS_USER: admin
-      JENKINS_TOKEN: admin
-      # Set a shared secret here to require X-Webhook-Token from Jenkins.
-      # Empty = accept any caller (fine for the local demo).
-      JENKINS_WEBHOOK_SECRET: ""
     depends_on:
       - elasticsearch
       - postgres
       - redis
-      - jenkins
     volumes:
       - ./backend:/app
     command: python main.py
 
   frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile.frontend
+    build: ./frontend
     container_name: aiops-frontend
     ports:
-      - "5173:5173"
+      - "3000:3000"
     depends_on:
       - backend
     volumes:
       - ./frontend:/app
-      - /app/node_modules
 
 volumes:
   elasticsearch_data:
   postgres_data:
-  jenkins_home:
