@@ -37,18 +37,18 @@ export default function Dashboard() {
     return () => clearInterval(interval)
   }, [])
 
-  if (loading) return <div className="text-center p-8">⏳ Loading...</div>
-  if (error) return <div className="text-red-400 p-8">❌ Error: {error}</div>
-  if (!stats) return <div className="text-red-400 p-8">No data available</div>
+  if (loading) return <div className="text-center p-8">⏳ Завантаження...</div>
+  if (error) return <div className="text-red-400 p-8">❌ Помилка: {error}</div>
+  if (!stats) return <div className="text-red-400 p-8">Дані відсутні</div>
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold">📊 Dashboard</h1>
+      <h1 className="text-3xl font-bold">📊 Дашборд</h1>
 
       {/* KPI Cards - Top Row */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-gray-800 p-6 rounded border border-gray-700">
-          <p className="text-gray-400 text-sm">Total Alerts (7d)</p>
+          <p className="text-gray-400 text-sm">Всього сповіщень (7д)</p>
           <p className="text-3xl font-bold mt-2">{stats.total_alerts}</p>
         </div>
         <div className="bg-gray-800 p-6 rounded border border-gray-700">
@@ -64,7 +64,7 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="bg-gray-800 p-6 rounded border border-gray-700">
-          <p className="text-gray-400 text-sm">Critical Issues</p>
+          <p className="text-gray-400 text-sm">Критичні проблеми</p>
           <p className="text-3xl font-bold mt-2 text-red-400">{stats.critical_issues}</p>
         </div>
       </div>
@@ -85,7 +85,7 @@ export default function Dashboard() {
             </p>
           </div>
           <div className="bg-gray-800 p-4 rounded border border-gray-700">
-            <p className="text-gray-400 text-sm">Test Samples</p>
+            <p className="text-gray-400 text-sm">Тестові зразки</p>
             <p className="text-2xl font-bold mt-2">{metrics.test_samples}</p>
           </div>
           <div className="bg-gray-800 p-4 rounded border border-gray-700">
@@ -97,7 +97,7 @@ export default function Dashboard() {
 
       {/* Anomalies Trend Chart */}
       <div className="bg-gray-800 p-6 rounded border border-gray-700">
-        <h2 className="text-xl font-bold mb-4">📈 Anomalies Trend (7 days)</h2>
+        <h2 className="text-xl font-bold mb-4">📈 Тренд аномалій (7 днів)</h2>
         <ResponsiveContainer width="100%" height={300}>
           <LineChart data={stats.anomalies_trend}>
             <CartesianGrid strokeDasharray="3 3" stroke="#333" />
@@ -126,8 +126,8 @@ export default function Dashboard() {
       {metrics && (
         <div className="bg-blue-900/30 border border-blue-700 p-4 rounded">
           <p className="text-blue-300 text-sm">
-            <strong>ℹ️ Model Information:</strong> Trained on {metrics.model_version} | 
-            Trained at: {new Date(metrics.trained_at).toLocaleString()} | 
+            <strong>ℹ️ Інформація про модель:</strong> Навчена на {metrics.model_version} | 
+            Навчання: {new Date(metrics.trained_at).toLocaleString()} | 
             TP: {metrics.true_positives} | FP: {metrics.false_positives}
           </p>
         </div>
@@ -136,9 +136,9 @@ export default function Dashboard() {
       {/* Performance Summary */}
       <div className="bg-green-900/30 border border-green-700 p-4 rounded">
         <p className="text-green-300 text-sm">
-          <strong>✅ Model Status:</strong> Production-Ready | 
+          <strong>✅ Статус моделі:</strong> Готова до використання | 
           Accuracy: {(metrics?.accuracy * 100 || 0).toFixed(1)}% | 
-          Recall: {(metrics?.recall * 100 || 0).toFixed(1)}% (catches all anomalies!)
+          Recall: {(metrics?.recall * 100 || 0).toFixed(1)}% (виявляє всі аномалії!)
         </p>
       </div>
     </div>

@@ -40,7 +40,7 @@ export default function Predictor() {
 
   return (
     <div className="space-y-6 max-w-2xl">
-      <h1 className="text-3xl font-bold">🔮 Predictor</h1>
+      <h1 className="text-3xl font-bold">🔮 Передбачення</h1>
 
       <div className="bg-gray-800 p-6 rounded border border-gray-700 space-y-4">
         <div>
@@ -49,17 +49,17 @@ export default function Predictor() {
             type="text"
             value={pipelineId}
             onChange={(e) => setPipelineId(e.target.value)}
-            placeholder="e.g., jenkins-build-123"
+            placeholder="напр., jenkins-build-123"
             className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-2">Logs Sample</label>
+          <label className="block text-sm font-medium mb-2">Зразок логів</label>
           <textarea
             value={logs}
             onChange={(e) => setLogs(e.target.value)}
-            placeholder="Paste log output here..."
+            placeholder="Вставте вивід логів сюди..."
             rows="6"
             className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 font-mono text-sm"
           />
@@ -70,13 +70,13 @@ export default function Predictor() {
           disabled={loading || !pipelineId || !logs}
           className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 px-4 py-3 rounded font-semibold text-lg transition-colors"
         >
-          {loading ? '⏳ Analyzing...' : '🚀 Predict'}
+          {loading ? '⏳ Аналіз...' : '🚀 Передбачити'}
         </button>
       </div>
 
       {error && (
         <div className="bg-red-900/30 border border-red-700 p-4 rounded">
-          <p className="text-red-300">❌ Error: {error}</p>
+          <p className="text-red-300">❌ Помилка: {error}</p>
         </div>
       )}
 
@@ -84,41 +84,41 @@ export default function Predictor() {
         <div className={`${getRiskColor(result.prediction.risk_level)} p-6 rounded border-2 border-current`}>
           <div className="flex items-center gap-3 mb-4">
             <span className="text-4xl">{getRiskIcon(result.prediction.risk_level)}</span>
-            <h2 className="text-3xl font-bold">{result.prediction.risk_level} RISK</h2>
+            <h2 className="text-3xl font-bold">{result.prediction.risk_level} РИЗИК</h2>
           </div>
 
           <div className="space-y-3">
             <div className="flex justify-between">
-              <span>Risk Score:</span>
+              <span>Оцінка ризику:</span>
               <span className="font-bold">{(result.prediction.score * 100).toFixed(1)}%</span>
             </div>
 
             <div className="flex justify-between">
-              <span>Anomaly Detected:</span>
-              <span className="font-bold">{result.prediction.details.log_anomaly.is_anomaly ? 'YES ⚠️' : 'NO ✅'}</span>
+              <span>Аномалію виявлено:</span>
+              <span className="font-bold">{result.prediction.details.log_anomaly.is_anomaly ? 'ТАК ⚠️' : 'НІ ✅'}</span>
             </div>
 
             <div className="flex justify-between">
-              <span>Confidence:</span>
+              <span>Впевненість:</span>
               <span className="font-bold">{(result.prediction.details.log_anomaly.confidence * 100).toFixed(1)}%</span>
             </div>
 
             <div className="border-t border-current opacity-50 pt-3 mt-3">
-              <p className="text-sm font-semibold mb-2">Recommendation:</p>
+              <p className="text-sm font-semibold mb-2">Рекомендація:</p>
               <p className="text-sm">{result.prediction.recommendation}</p>
             </div>
           </div>
 
           <div className="mt-4 text-xs opacity-75">
-            Prediction ID: {result.prediction_id} | 
-            Time: {new Date(result.timestamp).toLocaleTimeString()}
+            ID передбачення: {result.prediction_id} | 
+            Час: {new Date(result.timestamp).toLocaleTimeString()}
           </div>
         </div>
       )}
 
       {/* Example logs */}
       <div className="bg-gray-800 p-4 rounded border border-gray-700">
-        <p className="text-sm text-gray-400 mb-3">💡 Try these log examples:</p>
+        <p className="text-sm text-gray-400 mb-3">💡 Спробуйте ці приклади логів:</p>
         <div className="space-y-2 text-xs">
           <button
             onClick={() => setLogs('ERROR: Database connection timeout after 30s')}

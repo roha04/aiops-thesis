@@ -101,9 +101,9 @@ export default function Analytics() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <h1 className="text-3xl font-bold">📊 Advanced Analytics</h1>
+        <h1 className="text-3xl font-bold">📊 Розширена аналітика</h1>
         <div className="bg-blue-900/30 border border-blue-700 p-8 rounded text-center">
-          <p className="text-blue-300">⏳ Loading analytics...</p>
+          <p className="text-blue-300">⏳ Завантаження аналітики...</p>
         </div>
       </div>
     )
@@ -112,10 +112,10 @@ export default function Analytics() {
   if (error) {
     return (
       <div className="space-y-6">
-        <h1 className="text-3xl font-bold">📊 Advanced Analytics</h1>
+        <h1 className="text-3xl font-bold">📊 Розширена аналітика</h1>
         <div className="bg-red-900/30 border border-red-700 p-8 rounded">
-          <p className="text-red-300">❌ Error: {error}</p>
-          <p className="text-red-300 text-sm mt-2">Check browser console (F12) and backend logs</p>
+          <p className="text-red-300">❌ Помилка: {error}</p>
+          <p className="text-red-300 text-sm mt-2">Перевірте консоль браузера (F12) і логи бекенду</p>
         </div>
       </div>
     )
@@ -123,17 +123,17 @@ export default function Analytics() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold">📊 Advanced Analytics</h1>
+      <h1 className="text-3xl font-bold">📊 Розширена аналітика</h1>
 
       {/* Summary Cards */}
       {summary?.summary ? (
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div className="bg-gray-800 p-4 rounded border border-gray-700">
-            <p className="text-gray-400 text-xs">Total Predictions</p>
+            <p className="text-gray-400 text-xs">Всього передбачень</p>
             <p className="text-2xl font-bold mt-1">{summary.summary.total_predictions || 0}</p>
           </div>
           <div className="bg-gray-800 p-4 rounded border border-gray-700">
-            <p className="text-gray-400 text-xs">Anomaly Rate</p>
+            <p className="text-gray-400 text-xs">Рівень аномалій</p>
             <p className="text-2xl font-bold mt-1 text-red-400">
               {typeof summary.summary.anomaly_rate === 'number' ? summary.summary.anomaly_rate.toFixed(1) : '0'}%
             </p>
@@ -151,13 +151,13 @@ export default function Analytics() {
             </p>
           </div>
           <div className="bg-gray-800 p-4 rounded border border-gray-700">
-            <p className="text-gray-400 text-xs">Total Alerts</p>
+            <p className="text-gray-400 text-xs">Всього сповіщень</p>
             <p className="text-2xl font-bold mt-1">{summary.summary.total_alerts || 0}</p>
           </div>
         </div>
       ) : (
         <div className="bg-gray-800 p-4 rounded border border-gray-700 text-gray-400">
-          No summary data available
+          Зведені дані відсутні
         </div>
       )}
 
@@ -203,7 +203,7 @@ export default function Analytics() {
         </div>
       ) : (
         <div className="bg-gray-800 p-6 rounded border border-gray-700">
-          <p className="text-gray-400">📈 ROC Curve data not available</p>
+          <p className="text-gray-400">📈 Дані ROC Curve недоступні</p>
         </div>
       )}
 
@@ -233,7 +233,7 @@ export default function Analytics() {
         </div>
       ) : (
         <div className="bg-gray-800 p-6 rounded border border-gray-700">
-          <p className="text-gray-400">📊 Precision-Recall data not available</p>
+          <p className="text-gray-400">📊 Дані Precision-Recall недоступні</p>
         </div>
       )}
 
@@ -299,22 +299,22 @@ export default function Analytics() {
             </div>
           ) : (
             <div className="bg-gray-800 p-6 rounded border border-gray-700">
-              <p className="text-gray-400">🎯 Feature Importance data not available</p>
+              <p className="text-gray-400">🎯 Дані Feature Importance недоступні</p>
             </div>
           )}
         </div>
       ) : (
         <div className="bg-gray-800 p-6 rounded border border-gray-700">
-          <p className="text-gray-400">🔲 Confusion Matrix data not available</p>
+          <p className="text-gray-400">🔲 Дані Confusion Matrix недоступні</p>
         </div>
       )}
 
       {/* Model Comparison */}
       {modelComparison?.comparison && modelComparison.comparison.length > 0 ? (
         <div className="bg-gray-800 p-6 rounded border border-gray-700">
-          <h2 className="text-xl font-bold mb-1">📉 Classifier Comparison (Latest Training Run)</h2>
+          <h2 className="text-xl font-bold mb-1">📉 Порівняння класифікаторів (останній запуск навчання)</h2>
           {modelComparison.training_run && (
-            <p className="text-xs text-gray-400 mb-4">Run: {modelComparison.training_run}</p>
+            <p className="text-xs text-gray-400 mb-4">Запуск: {modelComparison.training_run}</p>
           )}
           <ResponsiveContainer width="100%" height={320}>
             <ComposedChart data={modelComparison.comparison}>
@@ -366,7 +366,7 @@ export default function Analytics() {
                     <span className="font-bold text-orange-400">
                       {m.cv_f1_mean
                         ? `${(m.cv_f1_mean * 100).toFixed(2)}% ± ${m.cv_f1_std ? (m.cv_f1_std * 100).toFixed(2) : '?'}%`
-                        : 'N/A (sequence model)'}
+                        : 'Н/Д (послідовна модель)'}
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -388,21 +388,21 @@ export default function Analytics() {
         </div>
       ) : (
         <div className="bg-gray-800 p-6 rounded border border-gray-700">
-          <p className="text-gray-400">📉 No model comparison data yet — run training first.</p>
+          <p className="text-gray-400">📉 Дані порівняння моделей відсутні — спочатку запустіть навчання.</p>
         </div>
       )}
 
       {/* Detailed Metrics Table */}
       {summary?.summary ? (
         <div className="bg-gray-800 p-6 rounded border border-gray-700">
-          <h2 className="text-xl font-bold mb-4">📋 Detailed Metrics</h2>
+          <h2 className="text-xl font-bold mb-4">📋 Детальні метрики</h2>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="border-b border-gray-700">
                 <tr>
-                  <th className="text-left py-2 px-4">Metric</th>
-                  <th className="text-right py-2 px-4">Value</th>
-                  <th className="text-left py-2 px-4">Interpretation</th>
+                  <th className="text-left py-2 px-4">Метрика</th>
+                  <th className="text-right py-2 px-4">Значення</th>
+                  <th className="text-left py-2 px-4">Інтерпретація</th>
                 </tr>
               </thead>
               <tbody>
@@ -411,31 +411,31 @@ export default function Analytics() {
                   <td className="text-right font-bold">
                     {typeof summary.summary.model_accuracy === 'number' ? (summary.summary.model_accuracy * 100).toFixed(2) : '0'}%
                   </td>
-                  <td className="text-gray-400">Correct predictions out of all</td>
+                  <td className="text-gray-400">Правильні передбачення із усіх</td>
                 </tr>
                 <tr className="border-b border-gray-700 hover:bg-gray-700/50">
                   <td className="py-2 px-4">F1 Score</td>
                   <td className="text-right font-bold">
                     {typeof summary.summary.model_f1 === 'number' ? summary.summary.model_f1.toFixed(3) : '0'}
                   </td>
-                  <td className="text-gray-400">Balance of precision & recall</td>
+                  <td className="text-gray-400">Баланс precision і recall</td>
                 </tr>
                 <tr className="border-b border-gray-700 hover:bg-gray-700/50">
-                  <td className="py-2 px-4">Anomaly Rate</td>
+                  <td className="py-2 px-4">Рівень аномалій</td>
                   <td className="text-right font-bold">
                     {typeof summary.summary.anomaly_rate === 'number' ? summary.summary.anomaly_rate.toFixed(2) : '0'}%
                   </td>
-                  <td className="text-gray-400">% of predictions flagged anomalies</td>
+                  <td className="text-gray-400">% передбачень, позначених як аномалії</td>
                 </tr>
                 <tr className="border-b border-gray-700 hover:bg-gray-700/50">
-                  <td className="py-2 px-4">Total Predictions</td>
+                  <td className="py-2 px-4">Всього передбачень</td>
                   <td className="text-right font-bold">{summary.summary.total_predictions || 0}</td>
-                  <td className="text-gray-400">Predictions made on system</td>
+                  <td className="text-gray-400">Передбачень зроблено системою</td>
                 </tr>
                 <tr className="hover:bg-gray-700/50">
-                  <td className="py-2 px-4">Test Samples</td>
+                  <td className="py-2 px-4">Тестові зразки</td>
                   <td className="text-right font-bold">{summary.summary.test_samples || 0}</td>
-                  <td className="text-gray-400">Samples used for evaluation</td>
+                  <td className="text-gray-400">Зразки для оцінювання</td>
                 </tr>
               </tbody>
             </table>
@@ -443,19 +443,19 @@ export default function Analytics() {
         </div>
       ) : (
         <div className="bg-gray-800 p-6 rounded border border-gray-700">
-          <p className="text-gray-400">📋 No detailed metrics available</p>
+          <p className="text-gray-400">📋 Детальні метрики недоступні</p>
         </div>
       )}
 
       {/* Footer */}
       <div className="bg-blue-900/30 border border-blue-700 p-4 rounded text-sm text-blue-300">
-        <p>💡 <strong>How to use this data for your thesis:</strong></p>
+        <p>💡 <strong>Як використовувати ці дані для дипломної роботи:</strong></p>
         <ul className="mt-2 space-y-1 ml-4">
-          <li>• ROC Curve: Shows model's ability to distinguish between classes</li>
-          <li>• Confusion Matrix: Breaks down true/false positives and negatives</li>
-          <li>• Precision-Recall: Trade-off between catching anomalies and false alarms</li>
-          <li>• Feature Importance: Shows which log features matter most</li>
-          <li>• Model Comparison: Tracks improvements over time</li>
+          <li>• ROC Curve: показує здатність моделі розрізняти класи</li>
+          <li>• Confusion Matrix: розподіл справжніх/хибних результатів</li>
+          <li>• Precision-Recall: компроміс між виявленням аномалій і хибними спрацьовуваннями</li>
+          <li>• Feature Importance: показує, які ознаки логів найважливіші</li>
+          <li>• Порівняння моделей: відстежує покращення з часом</li>
         </ul>
       </div>
     </div>
