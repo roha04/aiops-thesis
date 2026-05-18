@@ -152,58 +152,12 @@ class JenkinsConnector:
             return None
         return text[-2048:] if len(text) > 2048 else text
 
-    def get_build(self, job_name: str, build_number: int) -> Optional[dict]:
-        """
-        Fetch metadata for a single build (used by the webhook endpoint
-        to backfill duration/url/timestamp when the pipeline doesn't
-        ship them in the payload).
-        """
-        data = self._get(
-            f"/job/{job_name}/{build_number}/api/json"
-            "?tree=number,result,timestamp,duration,url"
-        )
-        if data is None:
-            return None
-        ts = None
-        if data.get("timestamp"):
-            try:
-                ts = datetime.utcfromtimestamp(data["timestamp"] / 1000).isoformat()
-            except (TypeError, ValueError):
-                ts = None
-        return {
-            "job_name": job_name,
-            "build_number": data.get("number", build_number),
-            "status": data.get("result") or "IN_PROGRESS",
-            "duration_ms": data.get("duration"),
-            "url": data.get("url", ""),
-            "timestamp": ts,
-        }
-
-    def _get_crumb(self) -> Optional[dict]:
-        """
-        Fetch Jenkins CSRF crumb. Needed for POSTs when CSRF protection
-        is enabled (default since Jenkins 2.222.x).
-        """
-        url = f"{self.base}/crumbIssuer/api/json"
-        try:
-            resp = requests.get(url, auth=self.auth, timeout=self.timeout)
-            if resp.status_code != 200:
-                return None
-            data = resp.json()
-            return {data["crumbRequestField"]: data["crumb"]}
-        except Exception as e:
-            logger.debug(f"crumb fetch failed: {e}")
-            return None
-
     def trigger_build(self, job_name: str) -> bool:
         """Trigger a new build (requires build token / proper auth)."""
         url = f"{self.base}/job/{job_name}/build"
-        headers = self._get_crumb() or {}
         try:
-            resp = requests.post(
-                url, auth=self.auth, headers=headers, timeout=self.timeout
-            )
-            return resp.status_code in (200, 201, 302)
+            resp = requests.post(url, auth=self.auth, timeout=self.timeout)
+            return resp.status_code in (200, 201)
         except Exception as e:
             logger.error(f"Trigger build failed: {e}")
             return False

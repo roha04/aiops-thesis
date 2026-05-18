@@ -41,16 +41,9 @@ export default function Jenkins() {
   const [streaming, setStreaming] = useState(false)
   const [streamLog, setStreamLog] = useState([])
   const [error, setError] = useState(null)
-  const [activeTab, setActiveTab] = useState('overview') // overview | builds | comparison | stream | live
+  const [activeTab, setActiveTab] = useState('overview') // overview | builds | comparison | stream
   const esRef = useRef(null)
   const streamEndRef = useRef(null)
-
-  // ── webhook / live integration ────────────────────────────────────────────
-  const [webhookInfo, setWebhookInfo] = useState(null)
-  const [liveConnected, setLiveConnected] = useState(false)
-  const [liveLog, setLiveLog] = useState([])
-  const [triggering, setTriggering] = useState('')
-  const liveEsRef = useRef(null)
 
   // ── data fetchers ─────────────────────────────────────────────────────────
 
@@ -92,18 +85,9 @@ export default function Jenkins() {
     } catch { /* silent */ }
   }, [])
 
-  const fetchWebhookInfo = useCallback(async () => {
-    try {
-      const r = await API.get('/api/jenkins/webhook-info')
-      setWebhookInfo(r.data)
-    } catch { /* silent */ }
-  }, [])
-
   const refreshAll = useCallback(async () => {
-    await Promise.all([
-      fetchOverview(), fetchComparison(), fetchHistory(), fetchJobs(), fetchWebhookInfo(),
-    ])
-  }, [fetchOverview, fetchComparison, fetchHistory, fetchJobs, fetchWebhookInfo])
+    await Promise.all([fetchOverview(), fetchComparison(), fetchHistory(), fetchJobs()])
+  }, [fetchOverview, fetchComparison, fetchHistory, fetchJobs])
 
   useEffect(() => {
     fetchStatus()
@@ -111,32 +95,6 @@ export default function Jenkins() {
     const iv = setInterval(refreshAll, 30_000)
     return () => clearInterval(iv)
   }, [refreshAll, fetchStatus])
-
-  // ── Persistent live channel: open one EventSource for /stream-live and
-  //    keep it open while the page is mounted, no matter which tab is active.
-  //    Every Jenkins webhook hit will push an event onto this stream.
-  useEffect(() => {
-    const es = new EventSource('http://localhost:8000/api/jenkins/stream-live')
-    liveEsRef.current = es
-    es.onopen = () => setLiveConnected(true)
-    es.onerror = () => setLiveConnected(false)
-    es.onmessage = (ev) => {
-      try {
-        const data = JSON.parse(ev.data)
-        if (data.event === 'connected') return
-        if (data.event === 'build') {
-          setLiveLog((prev) => [data, ...prev].slice(0, 100))
-          // Refresh overview/history quietly so KPIs stay in sync
-          fetchOverview()
-          fetchHistory()
-        }
-      } catch { /* ignore malformed events */ }
-    }
-    return () => {
-      es.close()
-      liveEsRef.current = null
-    }
-  }, [fetchOverview, fetchHistory])
 
   // re-fetch history when job filter changes
   useEffect(() => { fetchHistory() }, [fetchHistory])
@@ -194,26 +152,6 @@ export default function Jenkins() {
     setStreaming(false)
   }
 
-  const triggerJob = async (jobName) => {
-    if (!jobName) return
-    setTriggering(jobName)
-    setError(null)
-    try {
-      await API.post(`/api/jenkins/trigger/${encodeURIComponent(jobName)}`)
-      // Webhook will push the result onto /stream-live, but also poll the
-      // mode badge so the UI can flip from "demo" to "live" right away.
-      fetchStatus()
-    } catch (e) {
-      setError(
-        e?.response?.data?.detail
-          ? `${jobName}: ${e.response.data.detail}`
-          : `${jobName}: ${e.message}`
-      )
-    } finally {
-      setTriggering('')
-    }
-  }
-
   // cleanup on unmount
   useEffect(() => () => esRef.current?.close(), [])
 
@@ -246,20 +184,6 @@ export default function Jenkins() {
             jenkinsMode === 'live' ? 'bg-green-900 text-green-300' : 'bg-yellow-900 text-yellow-300'
           }`}>
             {jenkinsMode === 'live' ? '🟢 Реальний Jenkins' : '🟡 Демо-режим'}
-          </span>
-
-          {/* Webhook / live SSE badge */}
-          <span
-            title={
-              webhookInfo
-                ? `POST ${webhookInfo.url} · live subscribers: ${webhookInfo.live_subscribers}`
-                : 'webhook info unavailable'
-            }
-            className={`px-3 py-1 rounded-full text-xs font-semibold uppercase ${
-              liveConnected ? 'bg-purple-900 text-purple-200' : 'bg-gray-800 text-gray-400'
-            }`}
-          >
-            {liveConnected ? '📡 Webhook LIVE' : '⚪ Webhook OFF'}
           </span>
 
           {/* Job filter */}
@@ -322,7 +246,6 @@ export default function Jenkins() {
           { id: 'overview', label: '📊 Графік' },
           { id: 'builds', label: '📋 Історія збірок' },
           { id: 'comparison', label: '🎯 Таблиця порівняння' },
-          { id: 'live', label: `🪝 Webhooks${liveConnected ? ' 🟣' : ''}` },
           { id: 'stream', label: `📡 Live-стрім${streaming ? ' 🔴' : ''}` },
         ].map((tab) => (
           <button
@@ -489,115 +412,6 @@ export default function Jenkins() {
               </tbody>
             </table>
           </div>
-        </div>
-      )}
-
-      {activeTab === 'live' && (
-        <div className="space-y-4">
-          <div className="bg-gray-800 p-4 rounded border border-gray-700">
-            <div className="flex items-start justify-between flex-wrap gap-3">
-              <div>
-                <h2 className="text-lg font-bold">
-                  🪝 Реальні події з Jenkins (вебхуки)
-                </h2>
-                <p className="text-xs text-gray-400 mt-1">
-                  Jenkins POST-ить{' '}
-                  <code className="bg-gray-900 px-1 rounded text-purple-300">
-                    {webhookInfo?.url ?? '/api/jenkins/webhook'}
-                  </code>{' '}
-                  у кінці кожної збірки. Бекенд миттєво проганяє лог через ML і пушить подію сюди.
-                </p>
-              </div>
-              <span
-                className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                  liveConnected ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'
-                }`}
-              >
-                SSE {liveConnected ? 'CONNECTED' : 'OFFLINE'}
-              </span>
-            </div>
-
-            {/* Trigger panel */}
-            {jobs.length > 0 && (
-              <div className="mt-4">
-                <p className="text-xs text-gray-400 mb-2">Запустити збірку (Jenkins → вебхук → ML):</p>
-                <div className="flex flex-wrap gap-2">
-                  {jobs.slice(0, 8).map((j) => (
-                    <button
-                      key={j.name}
-                      onClick={() => triggerJob(j.name)}
-                      disabled={triggering === j.name || jenkinsMode !== 'live'}
-                      title={
-                        jenkinsMode !== 'live'
-                          ? 'Доступно лише коли Jenkins у режимі live'
-                          : `Запустити ${j.name}`
-                      }
-                      className="bg-purple-700 hover:bg-purple-600 disabled:opacity-40 disabled:cursor-not-allowed px-3 py-1.5 rounded text-xs font-mono"
-                    >
-                      {triggering === j.name ? '⏳' : '▶'} {j.name}
-                    </button>
-                  ))}
-                </div>
-                {jenkinsMode !== 'live' && (
-                  <p className="text-xs text-yellow-400 mt-2">
-                    ⚠️ Jenkins недоступний — запустіть{' '}
-                    <code className="bg-gray-900 px-1 rounded">docker-compose up jenkins</code>.
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-
-          {liveLog.length === 0 ? (
-            <div className="bg-gray-800 p-8 rounded border border-gray-700 text-center text-gray-500">
-              Ще немає подій із Jenkins. Запустіть збірку, і вона з’явиться тут{' '}
-              <strong>миттєво</strong> після завершення (без поллінгу).
-            </div>
-          ) : (
-            <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
-              {liveLog.map((b, idx) => (
-                <div
-                  key={`live-${b.job_name}-${b.build_number}-${idx}`}
-                  className="bg-gray-800 border border-purple-700/40 rounded p-4 grid grid-cols-1 md:grid-cols-5 gap-3 items-center"
-                >
-                  <div>
-                    <p className="text-xs text-gray-400">Завдання</p>
-                    <p className="font-mono text-sm">{b.job_name}</p>
-                    <p className="text-xs text-gray-500">#{b.build_number}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-400">Статус</p>
-                    <span className={`px-2 py-0.5 rounded text-xs ${statusBadge(b.status)}`}>
-                      {b.status}
-                    </span>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-400">ML-прогноз</p>
-                    <p className="text-sm">
-                      {b.predicted_failure ? '🔴 Збій' : '🟢 Успіх'}
-                      {b.prediction_confidence != null && (
-                        <span className="text-xs text-gray-500 ml-1">
-                          ({(b.prediction_confidence * 100).toFixed(0)}%)
-                        </span>
-                      )}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-400">Ризик</p>
-                    <p className={`font-semibold text-sm ${riskColour(b.risk_level)}`}>
-                      {b.risk_level ?? '—'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-400">Правильно?</p>
-                    <span className={`px-2 py-0.5 rounded text-xs ${correctBadge(b.prediction_correct)}`}>
-                      {b.prediction_correct == null ? '—' : b.prediction_correct ? '✓ Так' : '✗ Ні'}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       )}
 
